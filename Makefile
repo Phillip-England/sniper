@@ -1,5 +1,5 @@
 dev:
-	bun './app/**/*.html';
+	go run main.go
 
 tw:
 	tailwindcss -i ./static/input.css -o ./static/output.css --watch;

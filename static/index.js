@@ -1,4 +1,20 @@
 // client/index.ts
+var sounds = {
+  on: new Audio("/static/on.wav"),
+  off: new Audio("/static/off.wav"),
+  exit: new Audio("/static/exit.wav")
+};
+Object.values(sounds).forEach((sound) => {
+  sound.preload = "auto";
+  sound.load();
+});
+var playSound = (type) => {
+  const audio = sounds[type];
+  audio.currentTime = 0;
+  audio.play().catch((e) => {
+    console.warn(`Audio playback failed for ${type}. Check file path /static/${type}.wav`, e);
+  });
+};
 var btn = document.getElementById("record-button");
 var transcriptEl = document.getElementById("transcript");
 var interimEl = document.getElementById("interim");
@@ -29,6 +45,7 @@ if (!SpeechRecognitionCtor) {
   recognition.interimResults = true;
   recognition.lang = "en-US";
   recognition.onstart = () => {
+    playSound("on");
     isRecording = true;
     updateGreenDot();
     btn.classList.remove(...defaultClasses);
@@ -73,11 +90,16 @@ if (!SpeechRecognitionCtor) {
     if (final) {
       const command = final.toLowerCase().trim().replace(/[.,?!]/g, "");
       if (command === "exit") {
+        playSound("exit");
+        transcriptEl.innerText = "";
+        interimEl.innerText = "";
+        placeholder.classList.remove("hidden");
         shouldContinue = false;
         stopRecording();
         return;
       }
       if (command === "stop") {
+        playSound("off");
         transcriptEl.innerText = "";
         interimEl.innerText = "";
         placeholder.classList.remove("hidden");
@@ -86,6 +108,7 @@ if (!SpeechRecognitionCtor) {
         return;
       }
       if (command === "start") {
+        playSound("on");
         isLogging = true;
         updateGreenDot();
         return;
