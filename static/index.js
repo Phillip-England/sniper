@@ -123,6 +123,14 @@ class SniperCore {
   ui;
   recognition = null;
   openedWindows = [];
+  webShortcuts = {
+    ai: "https://gemini.google.com",
+    "chat gpt": "https://chatgpt.com",
+    youtube: "https://youtube.com",
+    github: "https://github.com",
+    local: "http://localhost:3000",
+    mail: "https://gmail.com"
+  };
   state = {
     isRecording: false,
     isLogging: true,
@@ -216,6 +224,18 @@ class SniperCore {
   }
   handleCommands(text) {
     const command = text.toLowerCase().trim().replace(/[?!]/g, "");
+    if (command.startsWith("open")) {
+      const target = command.replace("open", "").trim();
+      if (this.webShortcuts[target]) {
+        this.audio.play("sniper-visit");
+        const url = this.webShortcuts[target];
+        const newWin = window.open(url, "_blank");
+        if (newWin)
+          this.openedWindows.push(newWin);
+        this.ui.clearText();
+        return { capturedByCommand: true };
+      }
+    }
     if (command.startsWith("visit")) {
       this.audio.play("sniper-visit");
       const rawUrl = command.replace("visit", "").trim();
@@ -236,6 +256,10 @@ class SniperCore {
         this.ui.clearText();
         this.state.shouldContinue = false;
         this.stop();
+        return { capturedByCommand: true };
+      case "reveal":
+        this.sendToBackend("reveal");
+        this.ui.clearText();
         return { capturedByCommand: true };
       case "off":
         this.audio.play("sniper-off");

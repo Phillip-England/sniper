@@ -81,6 +81,12 @@ func runServerSide() error {
 func handleCommand(rawCommand string) {
 	fmt.Printf("Raw Input: %s\n", rawCommand)
 
+
+
+
+
+
+
 	// 1. DETERMINE MODIFIER KEY BASED ON OS
 	cmdKey := "control"
 	if runtime.GOOS == "darwin" {
@@ -95,9 +101,12 @@ func handleCommand(rawCommand string) {
 	cmd = strings.ReplaceAll(cmd, "triple click", "tclick")
 	cmd = strings.ReplaceAll(cmd, "select all", "selectall")
 	cmd = strings.ReplaceAll(cmd, "copy all", "copyall")
-	cmd = strings.ReplaceAll(cmd, "cut all", "cutall")           // NEW
-	cmd = strings.ReplaceAll(cmd, "paste all", "pasteall")       // NEW
-	cmd = strings.ReplaceAll(cmd, "shift enter", "shiftenter")   // NEW
+	cmd = strings.ReplaceAll(cmd, "cut all", "cutall")
+	cmd = strings.ReplaceAll(cmd, "paste all", "pasteall")
+	cmd = strings.ReplaceAll(cmd, "shift enter", "shiftenter")
+	
+	// New logic for Control One
+	cmd = strings.ReplaceAll(cmd, "control one", "controlone")
 
 	fmt.Printf("Normalized: %s\n", cmd)
 
@@ -146,6 +155,7 @@ func handleCommand(rawCommand string) {
 
 	case "copyall":
 		// Select All
+		robotgo.Click()
 		robotgo.KeyTap("a", cmdKey)
 		robotgo.KeyToggle(cmdKey, "up")
 
@@ -159,7 +169,7 @@ func handleCommand(rawCommand string) {
 		robotgo.KeyTap("x", cmdKey)
 		robotgo.KeyToggle(cmdKey, "up")
 
-	case "cutall": // NEW
+	case "cutall":
 		// Select All
 		robotgo.KeyTap("a", cmdKey)
 		robotgo.KeyToggle(cmdKey, "up")
@@ -174,7 +184,7 @@ func handleCommand(rawCommand string) {
 		robotgo.KeyTap("v", cmdKey)
 		robotgo.KeyToggle(cmdKey, "up")
 
-	case "pasteall": // NEW
+	case "pasteall":
 		// Select All
 		robotgo.KeyTap("a", cmdKey)
 		robotgo.KeyToggle(cmdKey, "up")
@@ -192,8 +202,14 @@ func handleCommand(rawCommand string) {
 	case "enter":
 		robotgo.KeyTap("enter")
 
-	case "shiftenter": // NEW
+	case "shiftenter":
 		robotgo.KeyTap("enter", "shift")
+
+	case "controlone":
+		// Press "1" with the Modifier key (Cmd/Ctrl)
+		robotgo.KeyTap("1", cmdKey)
+		// Ensure modifier is released
+		robotgo.KeyToggle(cmdKey, "up")
 
 	// --- Text Input ---
 	case "type":
@@ -237,7 +253,6 @@ func executeMouseMove(direction string, args []string) {
 
 func executeTypeCommand(args []string) {
 	// Safety buffer: Ensure previous modifier keys (Ctrl/Cmd) are physically processed as "UP"
-	// We also explicitly force it up here just in case
 	cmdKey := "control"
 	if runtime.GOOS == "darwin" {
 		cmdKey = "cmd"
@@ -246,6 +261,14 @@ func executeTypeCommand(args []string) {
 
 	time.Sleep(200 * time.Millisecond)
 
+	// Join arguments into a single string
 	text := strings.Join(args, " ")
-	robotgo.TypeStr(text)
+
+	// 1. Copy text to system clipboard
+	robotgo.WriteAll(text + " ")
+
+	// 2. Perform "Paste" shortcut (Cmd+V or Ctrl+V)
+	robotgo.KeyTap("v", cmdKey)
+	robotgo.KeyToggle(cmdKey, "up")
 }
+

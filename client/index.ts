@@ -204,7 +204,18 @@ class SniperCore {
   private ui: UIManager;
   private recognition: SpeechRecognition | null = null;
 
+  // Array to track all windows opened by this session (search, visit, and open)
   private openedWindows: Window[] = [];
+
+  // --- CUSTOM SHORTCUTS DICTIONARY ---
+  private webShortcuts: Record<string, string> = {
+    'ai': 'https://gemini.google.com',
+    'chat gpt': 'https://chatgpt.com',
+    'youtube': 'https://youtube.com',
+    'github': 'https://github.com',
+    'local': 'http://localhost:3000',
+    'mail': 'https://gmail.com'
+  };
 
   private state = {
     isRecording: false,
@@ -295,11 +306,9 @@ class SniperCore {
     };
   }
 
-// UPDATED: New method to send command to backend
   private async sendToBackend(command: string) {
     try {
       console.log(`[Sniper] Sending to backend: ${command}`);
-      // UPDATED: Added /api/data to match the Go route
       await fetch('http://localhost:8000/api/data', { 
         method: 'POST',
         headers: {
@@ -317,6 +326,25 @@ class SniperCore {
     
     // --- DYNAMIC COMMANDS ---
     
+    // COMMAND: "open [name]" -> Uses the dictionary
+    if (command.startsWith('open')) {
+      const target = command.replace('open', '').trim();
+      
+      // Check if the target exists in our webShortcuts dictionary
+      if (this.webShortcuts[target]) {
+        this.audio.play('sniper-visit');
+        const url = this.webShortcuts[target];
+        
+        const newWin = window.open(url, '_blank');
+        
+        // CRITICAL: Track this window so 'simplify' can close it later
+        if (newWin) this.openedWindows.push(newWin);
+        
+        this.ui.clearText();
+        return { capturedByCommand: true };
+      }
+    }
+
     // COMMAND: "visit [url]"
     if (command.startsWith('visit')) {
       this.audio.play('sniper-visit');
@@ -342,6 +370,11 @@ class SniperCore {
         this.ui.clearText();
         this.state.shouldContinue = false;
         this.stop();
+        return { capturedByCommand: true };
+      
+      case 'reveal':
+        this.sendToBackend('reveal');
+        this.ui.clearText();
         return { capturedByCommand: true };
 
       case 'off':
@@ -371,6 +404,7 @@ class SniperCore {
         this.ui.clearText();
         return { capturedByCommand: true };
       
+      // Closes all windows opened by 'search', 'visit', OR 'open'
       case 'simplify':
         this.audio.play('sniper-clear'); 
         this.closeOpenedWindows();
@@ -378,9 +412,7 @@ class SniperCore {
         return { capturedByCommand: true };
 
       default:
-        // UPDATED: Pass unrecognized commands to backend
         this.sendToBackend(command);
-        // We return false here so the text still appears in the UI
         return { capturedByCommand: false };
     }
   }
@@ -388,11 +420,13 @@ class SniperCore {
   private closeOpenedWindows() {
     let closedCount = 0;
     this.openedWindows.forEach(win => {
+      // Check if window object exists and isn't already closed manually
       if (win && !win.closed) {
         win.close();
         closedCount++;
       }
     });
+    // Reset the array after closing
     this.openedWindows = [];
     console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
   }

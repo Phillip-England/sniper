@@ -1,15 +1,9 @@
-# sniper
+# sniper-speech
 
-To install dependencies:
+Sniper speech is a system to control your computer using your voice. My passion for programming has caused me to develop pain in my left hand. This sent me on a journey to develop a system where i can continue to program without the use of my hands as much. Introducing sniper speech.
 
-```bash
-bun install
+## Installation 
+
+```bash 
+go install github.com/phillip-england/sniper-speech@latest
 ```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.3.2. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
