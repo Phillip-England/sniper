@@ -154,7 +154,7 @@ class UIManager {
     if (isLogging && final) {
       this.transcriptEl.innerText += final + ' ';
     }
-    
+     
     if (isLogging) {
       this.interimEl.innerText = interim;
     } else {
@@ -275,7 +275,7 @@ class SniperCore {
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
-        
+         
         if (!result || !result.length) continue;
         const alternative = result[0];
         if (!alternative) continue;
@@ -323,9 +323,9 @@ class SniperCore {
 
   private handleCommands(text: string): { capturedByCommand: boolean } {
     const command = text.toLowerCase().trim().replace(/[?!]/g, ''); 
-    
+     
     // --- DYNAMIC COMMANDS ---
-    
+     
     // COMMAND: "open [name]" -> Uses the dictionary
     if (command.startsWith('open')) {
       const target = command.replace('open', '').trim();
@@ -372,6 +372,22 @@ class SniperCore {
         this.stop();
         return { capturedByCommand: true };
       
+      // --- NEW COMMAND ADDED HERE ---
+      case 'help mouse':
+        this.audio.play('sniper-visit');
+        const mouseWin = window.open('/mouse', '_blank');
+        if (mouseWin) this.openedWindows.push(mouseWin);
+        this.ui.clearText();
+        return { capturedByCommand: true };
+
+      // --- NEW: Help Characters ---
+      case 'help characters':
+        this.audio.play('sniper-visit');
+        const charWin = window.open('/characters', '_blank');
+      if (charWin) this.openedWindows.push(charWin);
+      this.ui.clearText();
+      return { capturedByCommand: true };
+
       case 'reveal':
         this.sendToBackend('reveal');
         this.ui.clearText();

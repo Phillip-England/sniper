@@ -257,6 +257,20 @@ class SniperCore {
         this.state.shouldContinue = false;
         this.stop();
         return { capturedByCommand: true };
+      case "help mouse":
+        this.audio.play("sniper-visit");
+        const mouseWin = window.open("/mouse", "_blank");
+        if (mouseWin)
+          this.openedWindows.push(mouseWin);
+        this.ui.clearText();
+        return { capturedByCommand: true };
+      case "help characters":
+        this.audio.play("sniper-visit");
+        const charWin = window.open("/characters", "_blank");
+        if (charWin)
+          this.openedWindows.push(charWin);
+        this.ui.clearText();
+        return { capturedByCommand: true };
       case "reveal":
         this.sendToBackend("reveal");
         this.ui.clearText();

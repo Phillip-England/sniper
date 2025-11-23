@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/static/output.css"></link>
+  <title>Sonic Symbol Reference</title>
+</head>
+<body class="h-screen w-screen bg-black overflow-hidden">
+  <div class="h-full w-full flex flex-col font-mono text-white p-6">
+    
+    <div class="flex items-center justify-center flex-col gap-2 mb-8 z-10">
+      <h1 class="text-white text-4xl font-mono tracking-tighter">Sonic Grid</h1>
+      <p class="text-gray-500 text-sm">Say "characters [phrase]" to smash them together</p>
+      <div class="flex gap-4">
+        <a href="/" class="text-xs text-red-500 hover:text-red-400 mt-2 tracking-widest uppercase transition-colors">
+            &larr; Back to Speech
+        </a>
+        <a href="/mouse" class="text-xs text-blue-500 hover:text-blue-400 mt-2 tracking-widest uppercase transition-colors">
+            Mouse Grid &rarr;
+        </a>
+      </div>
+    </div>
+
+    <div class="flex-1 w-full max-w-6xl mx-auto overflow-hidden flex flex-col">
+      
+      <div class="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2">
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 pb-20">
+          
+          {{ range $phrase, $symbol := .Symbols }}
+          <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 flex flex-col items-center justify-center group hover:border-zinc-600 hover:bg-zinc-800 transition-all cursor-default aspect-square">
+            <span class="text-2xl font-bold text-blue-400 mb-2 uppercase tracking-wide">{{ $phrase }}</span>
+            <span class="text-zinc-500 text-4xl group-hover:text-white transition-colors">{{ $symbol }}</span>
+          </div>
+          {{ end }}
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

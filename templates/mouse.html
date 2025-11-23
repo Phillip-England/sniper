@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/static/output.css"></link>
+  <title>Mouse Command Center</title>
+</head>
+<body class="h-screen w-screen bg-black overflow-hidden">
+  <div class="h-full w-full flex flex-col font-mono text-white p-6">
+    
+    <div class="flex items-center justify-center flex-col gap-2 mb-8 z-10" id="header-container">
+      <h1 class="text-white text-4xl font-mono tracking-tighter">Mouse Grid</h1>
+      <p class="text-gray-500 text-sm">Coordinates & Command Reference</p>
+      <a href="/" class="text-xs text-red-500 hover:text-red-400 mt-2 tracking-widest uppercase transition-colors">
+        &larr; Back to Speech
+      </a>
+    </div>
+
+    <div class="flex-1 w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 overflow-hidden">
+      
+      <div class="flex flex-col gap-2 min-h-0">
+        <h2 class="text-xl text-zinc-300 border-b border-zinc-800 pb-2 mb-2">Saved Locations</h2>
+        <div class="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2">
+          
+          {{ if .Locations }}
+            <div class="grid grid-cols-1 gap-3">
+              {{ range $name, $point := .Locations }}
+              <div class="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 flex justify-between items-center group hover:border-zinc-700 transition-all">
+                <div>
+                  <span class="text-red-500 font-bold block text-lg">{{ $name }}</span>
+                  <span class="text-zinc-600 text-xs">x: {{ $point.X }} / y: {{ $point.Y }}</span>
+                </div>
+                <div class="text-xs text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  "teleport {{ $name }}"
+                </div>
+              </div>
+              {{ end }}
+            </div>
+          {{ else }}
+            <div class="h-32 flex items-center justify-center text-zinc-600 italic border border-dashed border-zinc-800 rounded-lg">
+              No locations remembered yet. <br> Say "remember [name]" to add one.
+            </div>
+          {{ end }}
+
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2 min-h-0">
+        <h2 class="text-xl text-zinc-300 border-b border-zinc-800 pb-2 mb-2">Mouse Reference</h2>
+        <div class="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2">
+          <div class="grid grid-cols-2 gap-3">
+            
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">click</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">right click</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">double click</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">triple click</span>
+            </div>
+            
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default col-span-2">
+              <span class="text-red-400 text-sm font-light">attack</span>
+            </div>
+
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">up [amount]</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">down [amount]</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">left [amount]</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">right [amount]</span>
+            </div>
+
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">remember [name]</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default">
+              <span class="text-zinc-400 text-sm font-light">forget [name]</span>
+            </div>
+            <div class="bg-zinc-900/30 border border-zinc-800/50 rounded p-3 text-center hover:bg-zinc-900 hover:border-zinc-600 transition-all cursor-default col-span-2">
+              <span class="text-zinc-400 text-sm font-light">teleport [name]</span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
