@@ -750,6 +750,9 @@
   .p-6 {
     padding: calc(var(--spacing) * 6);
   }
+  .p-7 {
+    padding: calc(var(--spacing) * 7);
+  }
   .pr-2 {
     padding-right: calc(var(--spacing) * 2);
   }

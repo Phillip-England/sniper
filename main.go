@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Phillip-England/vii"
 	"github.com/go-vgo/robotgo"
@@ -79,7 +80,7 @@ func runClientSide() error {
 			"left [dist]", "right [dist]", "up [dist]", "down [dist]",
 			"copy", "cut", "paste", "undo", "save",
 			"select all", "copy all", "cut all", "paste all",
-			"type [text]", "characters [text]", "enter", "shift enter",
+			"sentence [text]", "type [text]", "enter", "shift enter",
 		}
 
 		data := MousePageData{
@@ -136,7 +137,7 @@ func handleCommand(rawCommand string) {
 
 	cmd := strings.ToLower(rawCommand)
 
-	// Normalize
+	// Pre-processing phrases into single tokens
 	cmd = strings.ReplaceAll(cmd, "right click", "rclick")
 	cmd = strings.ReplaceAll(cmd, "triple click", "tclick")
 	cmd = strings.ReplaceAll(cmd, "select all", "selectall")
@@ -236,23 +237,34 @@ func handleCommand(rawCommand string) {
 		robotgo.KeyTap("v", cmdKey)
 		robotgo.KeyToggle(cmdKey, "up")
 
-	case "type":
-		pasteText(strings.Join(args, " "))
+	case "sentence":
+		// Formerly the 'type' command logic, but with formatting
+		rawText := strings.Join(args, " ")
+		if len(rawText) > 0 {
+			// Capitalize the first letter
+			r := []rune(rawText)
+			r[0] = unicode.ToUpper(r[0])
+			formattedText := string(r)
 
-	case "characters":
-		symbols := getSymbolMap()
-		// Join args so we have a raw string: "bang bang hash"
-		fullArgString := strings.Join(args, " ")
-
-		// Replace the words with symbols
-		for phrase, symbol := range symbols {
-			fullArgString = strings.ReplaceAll(fullArgString, phrase, symbol)
+			// Append period and space
+			formattedText = formattedText + ". "
+			pasteText(formattedText)
 		}
 
-		// Strip remaining spaces so "bang bang" becomes "!!" instead of "! !"
-		// Note: The map below maps "gap" to a unique placeholder if you actually need a space.
-		finalString := strings.ReplaceAll(fullArgString, " ", "")
-		pasteText(finalString)
+	case "type":
+		// Formerly the 'characters' command logic
+		symbols := getSymbolMap()
+		var builder strings.Builder
+
+		for _, token := range args {
+			if mappedChar, ok := symbols[token]; ok {
+				builder.WriteString(mappedChar)
+			} else {
+				fmt.Printf("Skipping unknown symbol token: %s\n", token)
+			}
+		}
+
+		pasteText(builder.String())
 
 	case "log":
 		fmt.Println("SYSTEM LOG:", strings.Join(args, " "))
@@ -262,52 +274,81 @@ func handleCommand(rawCommand string) {
 	}
 }
 
-// --- SYMBOL DICTIONARY (Sonic / Phonetic Optimized) ---
+// --- SYMBOL & ALPHABET MAP (Phonetic Optimized) ---
 
 func getSymbolMap() map[string]string {
 	return map[string]string{
-		// -- Wrappers --
-		// Distinct words for open/close to prevent "close brace" lag errors
-		"box":   "[",
-		"kit":   "]",
-		"curl":  "{",
-		"lock":  "}",
-		"open":  "(",
-		"close": ")",
-		"less":  "<",
-		"great": ">",
+		// --- NATO ALPHABET (Letters A-Z) ---
+		// Distinct words to avoid rhyming confusion
+		"alpha":    "a",
+		"bravo":    "b",
+		"charlie":  "c",
+		"delta":    "d",
+		"echo":     "e",
+		"foxtrot":  "f",
+		"golf":     "g",
+		"hotel":    "h",
+		"india":    "i",
+		"juliet":   "j",
+		"kilo":     "k",
+		"lima":     "l",
+		"mike":     "m",
+		"november": "n",
+		"oscar":    "o",
+		"papa":     "p",
+		"quebec":   "q",
+		"romeo":    "r",
+		"sierra":   "s",
+		"tango":    "t",
+		"uniform":  "u",
+		"victor":   "v",
+		"whiskey":  "w",
+		"xray":     "x",
+		"yankee":   "y",
+		"zulu":     "z",
 
-		// -- Math / Logic --
+		// --- SYMBOLS (Distinct Keywords) ---
+
+		// Brackets & Wrappers
+		"square": "[", // Distinct from "box"
+		"kit":    "]",
+		"curl":   "{",
+		"lock":   "}",
+		"open":   "(",
+		"close":  ")",
+		"less":   "<",
+		"great":  ">",
+
+		// Math & Logic
 		"plus":  "+",
 		"equal": "=",
 		"dash":  "-",
-		"floor": "_", // "Underscore" is too long
+		"floor": "_",
 		"star":  "*",
-		"per":   "%", // "Percent" often gets heard as "Per scent"
-		"hat":   "^", // "Caret" is often confused with "Carrot"
+		"cent":  "%", // "Per" can sound like "Purr", Cent is sharper
+		"peak":  "^", // "Hat" can sound like "That"
 
-		// -- Punctuation --
-		"bang":  "!",
-		"at":    "@",
-		"hash":  "#",
-		"cash":  "$",
-		"amp":   "&",
-		"pipe":  "|",
-		"wall":  "|", // Alternative to pipe
-		"back":  "\\",
-		"slash": "/",
-		"col":   ":",
-		"semi":  ";",
-		"dub":   "\"",
-		"tick":  "'",
-		"com":   ",", // "Comma" is fine, but "Com" is punchier
-		"dot":   ".",
-		"quest": "?",
-		"wave":  "~",
-		"grave": "`",
+		// Punctuation
+		"bang":   "!",
+		"at":     "@",
+		"hash":   "#",
+		"cash":   "$",
+		"amp":    "&",
+		"pipe":   "|",
+		"back":   "\\",
+		"stroke": "/", // "Slash" sounds like "Sash", Stroke is clearer
+		"col":    ":",
+		"semi":   ";",
+		"quote":  "\"", // Changed from "dub" for clarity
+		"tick":   "'",
+		"tail":   ",", // "Comma" is good, but "Tail" is single syllable distinct
+		"point":  ".", // "Dot" is good, "Point" is also very clear
+		"quest":  "?",
+		"wave":   "~",
+		"grave":  "`",
 
-		// -- Spacing --
-		"gap": " ", // Use this if you specifically want a space inside a character string
+		// Spacing
+		"space": " ",
 	}
 }
 
@@ -318,6 +359,7 @@ func pasteText(text string) {
 	if runtime.GOOS == "darwin" {
 		cmdKey = "cmd"
 	}
+	// Ensure modifier is up before pasting
 	robotgo.KeyToggle(cmdKey, "up")
 
 	originalClipboard, _ := robotgo.ReadAll()
