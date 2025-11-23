@@ -2,7 +2,6 @@
 
 /**
  * SECTION 1: TYPE DEFINITIONS
- * (No changes here)
  */
 interface SpeechRecognitionEvent extends Event {
   resultIndex: number;
@@ -94,7 +93,6 @@ class AudioManager {
 
 /**
  * SECTION 3: UI MANAGER CLASS
- * (No changes here)
  */
 class UIManager {
   private btn: HTMLButtonElement;
@@ -203,11 +201,11 @@ class SniperCore {
   private audio: AudioManager;
   private ui: UIManager;
   private recognition: SpeechRecognition | null = null;
-
-  // Array to track all windows opened by this session (search, visit, and open)
   private openedWindows: Window[] = [];
 
-  // --- CUSTOM SHORTCUTS DICTIONARY ---
+  // --- TRACKING WORDS ---
+  private printedWordCount: number = 0;
+
   private webShortcuts: Record<string, string> = {
     'ai': 'https://gemini.google.com',
     'chat gpt': 'https://chatgpt.com',
@@ -257,6 +255,8 @@ class SniperCore {
       this.state.isRecording = true;
       this.ui.setRecordingState(true);
       this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
+      // Reset word count on start
+      this.printedWordCount = 0;
     };
 
     this.recognition.onend = () => {
@@ -275,15 +275,37 @@ class SniperCore {
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
-        
         if (!result || !result.length) continue;
+        
         const alternative = result[0];
         if (!alternative) continue;
 
+        const currentTranscript = alternative.transcript;
+
         if (result.isFinal) {
-          finalChunk += alternative.transcript;
+          finalChunk += currentTranscript;
+          // RESET Counter because a new sentence will start next
+          this.printedWordCount = 0; 
         } else {
-          interimChunk += alternative.transcript;
+          interimChunk += currentTranscript;
+
+          // --- WORD STREAMING LOGIC ---
+          // 1. Split current phrase into words (removing empty strings)
+          const words = currentTranscript.trim().split(/\s+/).filter(w => w.length > 0);
+          
+          // 2. Check if we have new words compared to last time
+          if (words.length > this.printedWordCount) {
+            // 3. Get only the new words
+            const newWords = words.slice(this.printedWordCount);
+            
+            // 4. Log them
+            newWords.forEach(word => {
+              console.log("⚡ WORD:", word);
+            });
+
+            // 5. Update counter
+            this.printedWordCount = words.length;
+          }
         }
       }
 
@@ -324,22 +346,14 @@ class SniperCore {
   private handleCommands(text: string): { capturedByCommand: boolean } {
     const command = text.toLowerCase().trim().replace(/[?!]/g, ''); 
     
-    // --- DYNAMIC COMMANDS ---
-    
-    // COMMAND: "open [name]" -> Uses the dictionary
+    // COMMAND: "open [name]"
     if (command.startsWith('open')) {
       const target = command.replace('open', '').trim();
-      
-      // Check if the target exists in our webShortcuts dictionary
       if (this.webShortcuts[target]) {
         this.audio.play('sniper-visit');
         const url = this.webShortcuts[target];
-        
         const newWin = window.open(url, '_blank');
-        
-        // CRITICAL: Track this window so 'simplify' can close it later
         if (newWin) this.openedWindows.push(newWin);
-        
         this.ui.clearText();
         return { capturedByCommand: true };
       }
@@ -363,7 +377,6 @@ class SniperCore {
       return { capturedByCommand: true };
     }
 
-    // --- STATIC COMMANDS ---
     switch (command.replace(/[.,]/g, '')) { 
       case 'exit':
         this.audio.play('sniper-exit');
@@ -404,7 +417,6 @@ class SniperCore {
         this.ui.clearText();
         return { capturedByCommand: true };
       
-      // Closes all windows opened by 'search', 'visit', OR 'open'
       case 'simplify':
         this.audio.play('sniper-clear'); 
         this.closeOpenedWindows();
@@ -420,13 +432,11 @@ class SniperCore {
   private closeOpenedWindows() {
     let closedCount = 0;
     this.openedWindows.forEach(win => {
-      // Check if window object exists and isn't already closed manually
       if (win && !win.closed) {
         win.close();
         closedCount++;
       }
     });
-    // Reset the array after closing
     this.openedWindows = [];
     console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
   }
@@ -435,24 +445,20 @@ class SniperCore {
     if (!query) return;
     const normalized = query.replace(/ dot /g, '.').replace(/ period /g, '.');
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(normalized)}`;
-    
     const newWin = window.open(searchUrl, '_blank');
     if (newWin) this.openedWindows.push(newWin);
   }
 
   private openDirectUrl(transcript: string) {
     if (!transcript) return;
-
     let url = transcript.toLowerCase()
       .replace(/ dot /g, '.')
       .replace(/ period /g, '.')
       .replace(/ slash /g, '/')
       .replace(/\s+/g, ''); 
-
     if (!url.startsWith('http')) {
       url = 'https://' + url;
     }
-    
     const newWin = window.open(url, '_blank');
     if (newWin) this.openedWindows.push(newWin);
   }
