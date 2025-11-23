@@ -81,12 +81,6 @@ func runServerSide() error {
 func handleCommand(rawCommand string) {
 	fmt.Printf("Raw Input: %s\n", rawCommand)
 
-
-
-
-
-
-
 	// 1. DETERMINE MODIFIER KEY BASED ON OS
 	cmdKey := "control"
 	if runtime.GOOS == "darwin" {
@@ -95,6 +89,7 @@ func handleCommand(rawCommand string) {
 
 	// 2. NORMALIZE INPUT
 	cmd := strings.ToLower(rawCommand)
+
 
 	// 3. PRE-PROCESS PHRASES
 	cmd = strings.ReplaceAll(cmd, "right click", "rclick")
@@ -266,7 +261,7 @@ func executeTypeCommand(args []string) {
   text := strings.Join(args, " ")
 
   // 2. OVERWRITE: Copy new text to system clipboard
-  robotgo.WriteAll(text + " ")
+  robotgo.WriteAll(text)
 
   // 3. PASTE: Perform the shortcut
   robotgo.KeyTap("v", cmdKey)
