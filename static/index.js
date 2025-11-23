@@ -123,7 +123,6 @@ class SniperCore {
   ui;
   recognition = null;
   openedWindows = [];
-  printedWordCount = 0;
   webShortcuts = {
     ai: "https://gemini.google.com",
     "chat gpt": "https://chatgpt.com",
@@ -165,7 +164,6 @@ class SniperCore {
       this.state.isRecording = true;
       this.ui.setRecordingState(true);
       this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-      this.printedWordCount = 0;
     };
     this.recognition.onend = () => {
       if (this.state.shouldContinue) {
@@ -186,20 +184,10 @@ class SniperCore {
         const alternative = result[0];
         if (!alternative)
           continue;
-        const currentTranscript = alternative.transcript;
         if (result.isFinal) {
-          finalChunk += currentTranscript;
-          this.printedWordCount = 0;
+          finalChunk += alternative.transcript;
         } else {
-          interimChunk += currentTranscript;
-          const words = currentTranscript.trim().split(/\s+/).filter((w) => w.length > 0);
-          if (words.length > this.printedWordCount) {
-            const newWords = words.slice(this.printedWordCount);
-            newWords.forEach((word) => {
-              console.log("⚡ WORD:", word);
-            });
-            this.printedWordCount = words.length;
-          }
+          interimChunk += alternative.transcript;
         }
       }
       if (finalChunk) {

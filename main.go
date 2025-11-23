@@ -252,23 +252,32 @@ func executeMouseMove(direction string, args []string) {
 }
 
 func executeTypeCommand(args []string) {
-	// Safety buffer: Ensure previous modifier keys (Ctrl/Cmd) are physically processed as "UP"
-	cmdKey := "control"
-	if runtime.GOOS == "darwin" {
-		cmdKey = "cmd"
-	}
-	robotgo.KeyToggle(cmdKey, "up")
+  // Safety buffer: Ensure previous modifier keys are released
+  cmdKey := "control"
+  if runtime.GOOS == "darwin" {
+    cmdKey = "cmd"
+  }
+  robotgo.KeyToggle(cmdKey, "up")
 
-	time.Sleep(200 * time.Millisecond)
+  // 1. PRESERVE: Capture the current clipboard content
+  originalClipboard, _ := robotgo.ReadAll()
 
-	// Join arguments into a single string
-	text := strings.Join(args, " ")
+  // Join arguments into a single string
+  text := strings.Join(args, " ")
 
-	// 1. Copy text to system clipboard
-	robotgo.WriteAll(text + " ")
+  // 2. OVERWRITE: Copy new text to system clipboard
+  robotgo.WriteAll(text + " ")
 
-	// 2. Perform "Paste" shortcut (Cmd+V or Ctrl+V)
-	robotgo.KeyTap("v", cmdKey)
-	robotgo.KeyToggle(cmdKey, "up")
+  // 3. PASTE: Perform the shortcut
+  robotgo.KeyTap("v", cmdKey)
+  robotgo.KeyToggle(cmdKey, "up")
+
+  // 4. WAIT: This is critical. 
+  // If we restore the clipboard immediately, the OS might be too slow 
+  // to process the 'Paste' command, and it will accidentally paste 
+  // the *restored* text instead of the *new* text.
+  time.Sleep(200 * time.Millisecond)
+
+  // 5. RESTORE: Put the original text back
+  robotgo.WriteAll(originalClipboard)
 }
-
