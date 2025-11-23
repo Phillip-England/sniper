@@ -78,9 +78,12 @@ func runClientSide() error {
 			"remember [name]", "forget [name]",
 			"click", "rclick", "tclick",
 			"left [dist]", "right [dist]", "up [dist]", "down [dist]",
+			"scroll up [dist]", "scroll down [dist]",
+			"scroll left [dist]", "scroll right [dist]",
 			"copy", "cut", "paste", "undo", "save",
 			"select all", "copy all", "cut all", "paste all",
 			"sentence [text]", "type [text]", "enter", "shift enter",
+			"characters [text]", // Added new command to UI list
 		}
 
 		data := MousePageData{
@@ -174,6 +177,9 @@ func handleCommand(rawCommand string) {
 	case "left", "right", "up", "down":
 		handleMouse(cmd)
 
+	case "scroll":
+		handleScroll(cmd)
+
 	case "click":
 		robotgo.Click("left", false)
 	case "rclick":
@@ -250,6 +256,32 @@ func handleCommand(rawCommand string) {
 			formattedText = formattedText + ". "
 			pasteText(formattedText)
 		}
+
+	case "characters":
+		var builder strings.Builder
+		capitalizeNext := false
+
+		for _, word := range args {
+			// Check if we hit the modifier keyword
+			if strings.ToLower(word) == "capital" {
+				capitalizeNext = true
+				continue
+			}
+
+			// Process the word if not empty
+			r := []rune(word)
+			if len(r) > 0 {
+				char := r[0]
+				if capitalizeNext {
+					char = unicode.ToUpper(char)
+					capitalizeNext = false
+				} else {
+					char = unicode.ToLower(char)
+				}
+				builder.WriteRune(char)
+			}
+		}
+		pasteText(builder.String())
 
 	case "type":
 		// Formerly the 'characters' command logic
@@ -461,5 +493,34 @@ func handleMouse(command string) {
 		robotgo.Move(x, y-val)
 	case "down":
 		robotgo.Move(x, y+val)
+	}
+}
+
+func handleScroll(command string) {
+	parts := strings.Fields(command)
+	// Expects: "scroll", "direction", "amount"
+	// e.g. "scroll up 200"
+	if len(parts) < 3 {
+		fmt.Println("Scroll command requires direction and amount")
+		return
+	}
+
+	direction := parts[1]
+	val, _ := strconv.Atoi(strings.TrimPrefix(parts[2], "$"))
+
+	// robotgo.Scroll(x, y)
+	// X: positive = right, negative = left
+	// Y: positive = down, negative = up
+	switch direction {
+	case "up":
+		robotgo.Scroll(0, -val)
+	case "down":
+		robotgo.Scroll(0, val)
+	case "left":
+		robotgo.Scroll(-val, 0)
+	case "right":
+		robotgo.Scroll(val, 0)
+	default:
+		fmt.Printf("Unknown scroll direction: %s\n", direction)
 	}
 }
