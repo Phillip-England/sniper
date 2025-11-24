@@ -1,0 +1,23 @@
+{
+  "save": { "key": "s", "modifiers": ["command"] },
+  "undo": { "key": "z", "modifiers": ["command"] },
+  "redo": { "key": "z", "modifiers": ["command", "shift"] },
+  "copy": { "key": "c", "modifiers": ["command"] },
+  "paste": { "key": "v", "modifiers": ["command"] },
+  "cut": { "key": "x", "modifiers": ["command"] },
+  "select": { "key": "a", "modifiers": ["command"] },
+  "find": { "key": "f", "modifiers": ["command"] },
+  "print": { "key": "p", "modifiers": ["command"] },
+  "new": { "key": "t", "modifiers": ["command"] },
+  "close": { "key": "w", "modifiers": ["command"] },
+  "revert": { "key": "t", "modifiers": ["command", "shift"] },
+  "refresh": { "key": "r", "modifiers": ["command"] },
+  "history": { "key": "y", "modifiers": ["command"] },
+  "downloads": { "key": "j", "modifiers": ["command"] },
+  "zoom": { "key": "+", "modifiers": ["command"] },
+  "push": { "key": "-", "modifiers": ["command"] },
+  "lock": { "key": "l", "modifiers": ["command"] },
+  "desktop": { "key": "d", "modifiers": ["command"] },
+  "capture": { "key": "3", "modifiers": ["command", "shift"] },
+  "manager": { "key": "escape", "modifiers": ["command", "shift"] }
+}

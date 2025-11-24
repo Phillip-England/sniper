@@ -381,9 +381,9 @@ class SniperCore {
         return { capturedByCommand: true };
 
       // --- NEW: Help Characters ---
-      case 'help characters':
+      case 'help signs':
         this.audio.play('sniper-visit');
-        const charWin = window.open('/characters', '_blank');
+        const charWin = window.open('/signs', '_blank');
       if (charWin) this.openedWindows.push(charWin);
       this.ui.clearText();
       return { capturedByCommand: true };
