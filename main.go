@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -17,8 +19,10 @@ import (
 )
 
 const (
-	ClientPort = "3000"
-	ServerPort = "8000"
+	ClientPort  = "3000"
+	ServerPort  = "8000"
+	OllamaURL   = "http://localhost:11434/api/generate"
+	OllamaModel = "llama3.2" // Ensure you have run: ollama pull llama3.2
 )
 
 type MousePoint struct {
@@ -39,6 +43,18 @@ type CharPageData struct {
 type Shortcut struct {
 	Key       string   `json:"key"`
 	Modifiers []string `json:"modifiers"`
+}
+
+// Ollama structs for API communication
+type OllamaRequest struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+	Stream bool   `json:"stream"`
+}
+
+type OllamaResponse struct {
+	Response string `json:"response"`
+	Done     bool   `json:"done"`
 }
 
 func main() {
@@ -86,6 +102,7 @@ func runClientSide() error {
 			"select all", "copy all", "cut all", "paste all",
 			"sentence [text]", "type [text]", "enter", "shift enter",
 			"characters [text]", "quick [shortcut name]",
+			"terminal [instruction]",
 		}
 		data := MousePageData{
 			Locations: positions,
@@ -139,8 +156,6 @@ func handleCommand(rawCommand string) {
 	cmd = strings.ReplaceAll(cmd, "cut all", "cutall")
 	cmd = strings.ReplaceAll(cmd, "paste all", "pasteall")
 	cmd = strings.ReplaceAll(cmd, "shift enter", "shiftenter")
-	cmd = strings.ReplaceAll(cmd, "control one", "controlone")
-	cmd = strings.ReplaceAll(cmd, "control w", "controlw")
 	parts := strings.Fields(cmd)
 	if len(parts) == 0 {
 		return
@@ -148,6 +163,16 @@ func handleCommand(rawCommand string) {
 	verb := parts[0]
 	args := parts[1:]
 	switch verb {
+	case "control":
+		phrase := strings.Join(args, " ")
+		handleControlPhrase(phrase)
+	case "command":
+		phrase := strings.Join(args, " ")
+		handleCommandPhrase(phrase)
+	case "terminal":
+		// New feature: Send natural language to Ollama, get Linux command back, paste it
+		phrase := strings.Join(args, " ")
+		go handleTerminalPhrase(phrase) // Run in goroutine to not block if AI is slow
 	case "teleport":
 		phrase := strings.Join(args, " ")
 		teleportMouse(phrase)
@@ -275,6 +300,68 @@ func handleCommand(rawCommand string) {
 	default:
 		fmt.Printf("Unrecognized command: %s\n", verb)
 	}
+}
+
+// promptOllama sends a prompt to the running Ollama instance and returns the response text.
+// This is reusable for any future AI features.
+func promptOllama(prompt string) (string, error) {
+	reqBody := OllamaRequest{
+		Model:  OllamaModel,
+		Prompt: prompt,
+		Stream: false,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := http.Post(OllamaURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to Ollama: %v", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ollama returned status: %s", resp.Status)
+	}
+
+	var ollamaResp OllamaResponse
+	if err := json.Unmarshal(bodyBytes, &ollamaResp); err != nil {
+		return "", err
+	}
+
+	return ollamaResp.Response, nil
+}
+
+// handleTerminalPhrase specifically asks Ollama to generate a Linux command
+// and then pastes that command to the user's active window.
+func handleTerminalPhrase(phrase string) {
+	fmt.Printf("Generating terminal command for: %s\n", phrase)
+
+	// We construct a specific system prompt to ensure we get ONLY the command
+	// and not a conversational explanation.
+	systemInstruction := "You are a Linux command generator. Output ONLY the raw command executable for the following request. Do not include markdown formatting, backticks, or explanations. Do not include the preceding $ sign."
+	fullPrompt := fmt.Sprintf("%s\nRequest: %s", systemInstruction, phrase)
+
+	response, err := promptOllama(fullPrompt)
+	if err != nil {
+		fmt.Printf("Error generating command: %v\n", err)
+		return
+	}
+
+	// Clean up response just in case (remove backticks, extra whitespace)
+	cleanResponse := strings.TrimSpace(response)
+	cleanResponse = strings.Trim(cleanResponse, "`")
+	cleanResponse = strings.TrimSpace(cleanResponse)
+
+	fmt.Printf("Ollama suggested: %s\n", cleanResponse)
+	pasteText(cleanResponse)
 }
 
 // handleQuick processes shortcuts from shortcuts.json
@@ -454,5 +541,41 @@ func handleScroll(command string) {
 		robotgo.Scroll(val, 0)
 	default:
 		fmt.Printf("Unknown scroll direction: %s\n", direction)
+	}
+}
+
+func handleCommandPhrase(command string) {
+	parts := strings.Fields(command)
+	if len(parts) < 1 {
+		fmt.Println("Cmd command requires a keyword")
+		return
+	}
+	key := strings.Join(parts[1:], " ")
+	switch key {
+	case "1":
+		robotgo.KeyTap("1", "cmd")
+		robotgo.KeyToggle("cmd", "up")
+	case "one":
+		robotgo.KeyTap("1", "cmd")
+		robotgo.KeyToggle("cmd", "up")
+	default:
+	}
+}
+
+func handleControlPhrase(command string) {
+	parts := strings.Fields(command)
+	if len(parts) < 1 {
+		fmt.Println("Control command requires a keyword")
+		return
+	}
+	key := strings.Join(parts[1:], " ")
+	switch key {
+	case "1":
+		robotgo.KeyTap("1", "control")
+		robotgo.KeyToggle("control", "up")
+	case "one":
+		robotgo.KeyTap("1", "control")
+		robotgo.KeyToggle("control", "up")
+	default:
 	}
 }

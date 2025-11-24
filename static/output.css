@@ -530,11 +530,17 @@
   .left-1\/2 {
     left: calc(1/2 * 100%);
   }
+  .z-9 {
+    z-index: 9;
+  }
   .z-10 {
     z-index: 10;
   }
   .col-span-2 {
     grid-column: span 2 / span 2;
+  }
+  .m-5 {
+    margin: calc(var(--spacing) * 5);
   }
   .mx-auto {
     margin-inline: auto;
@@ -613,6 +619,9 @@
   }
   .w-3 {
     width: calc(var(--spacing) * 3);
+  }
+  .w-7 {
+    width: calc(var(--spacing) * 7);
   }
   .w-12 {
     width: calc(var(--spacing) * 12);
