@@ -208,6 +208,7 @@ func handleCommand(rawCommand string) {
 	case "log":
 		fmt.Println("SYSTEM LOG:", strings.Join(args, " "))
 	default:
+		robotgo.Click()
 		symbols := loadSymbolMap()
 		for _, token := range parts {
 			lowerToken := strings.ToLower(token)

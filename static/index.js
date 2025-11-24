@@ -124,6 +124,8 @@ class SniperCore {
   recognition = null;
   lastCommand = "";
   openedWindows = [];
+  lastLogTime = 0;
+  LOG_THROTTLE_RATE = 500;
   webShortcuts = {
     ai: "https://gemini.google.com",
     "chat gpt": "https://chatgpt.com",
@@ -188,6 +190,11 @@ class SniperCore {
         if (result.isFinal) {
           finalChunk += alternative.transcript;
         } else {
+          const now = Date.now();
+          if (now - this.lastLogTime > this.LOG_THROTTLE_RATE) {
+            console.log(`[Interim]: ${alternative.transcript}`);
+            this.lastLogTime = now;
+          }
           interimChunk += alternative.transcript;
         }
       }

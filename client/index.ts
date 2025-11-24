@@ -209,6 +209,10 @@ class SniperCore {
   // Array to track all windows opened by this session (search, visit, and open)
   private openedWindows: Window[] = [];
 
+  // --- LOGGING THROTTLE CONFIGURATION ---
+  private lastLogTime: number = 0;
+  private readonly LOG_THROTTLE_RATE: number = 500; // ms
+
   // --- CUSTOM SHORTCUTS DICTIONARY ---
   private webShortcuts: Record<string, string> = {
     'ai': 'https://gemini.google.com',
@@ -285,6 +289,14 @@ class SniperCore {
         if (result.isFinal) {
           finalChunk += alternative.transcript;
         } else {
+          // --- THROTTLED LOGGING START ---
+          const now = Date.now();
+          if (now - this.lastLogTime > this.LOG_THROTTLE_RATE) {
+            console.log(`[Interim]: ${alternative.transcript}`);
+            this.lastLogTime = now;
+          }
+          // --- THROTTLED LOGGING END ---
+          
           interimChunk += alternative.transcript;
         }
       }
