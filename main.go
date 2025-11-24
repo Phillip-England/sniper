@@ -36,13 +36,21 @@ type MousePageData struct {
 }
 
 type CharPageData struct {
-	Symbols map[string]string
+	Symbols map[string]SymbolConfig
 }
 
-// Shortcut represents the JSON structure for a keyboard command
-type Shortcut struct {
+// KeyAction defines the specific key press and modifiers
+type KeyAction struct {
 	Key       string   `json:"key"`
-	Modifiers []string `json:"modifiers"`
+	Modifiers []string `json:"modifiers,omitempty"`
+}
+
+// SymbolConfig now supports arrays of actions to handle sequences (macros)
+type SymbolConfig struct {
+	Default []KeyAction `json:"default"`
+	Darwin  []KeyAction `json:"darwin,omitempty"`
+	Linux   []KeyAction `json:"linux,omitempty"`
+	Windows []KeyAction `json:"windows,omitempty"`
 }
 
 // Ollama structs for API communication
@@ -91,17 +99,14 @@ func runClientSide() error {
 		if err == nil {
 			json.Unmarshal(fileBytes, &positions)
 		}
+		// Simplified command list for the UI
 		staticCmds := []string{
 			"teleport [name]", "attack [name]",
 			"remember [name]", "forget [name]",
 			"click", "rclick", "tclick",
 			"left [dist]", "right [dist]", "up [dist]", "down [dist]",
 			"scroll up [dist]", "scroll down [dist]",
-			"scroll left [dist]", "scroll right [dist]",
-			"copy", "cut", "paste", "undo", "save",
-			"select all", "copy all", "cut all", "paste all",
-			"sentence [text]", "type [text]", "enter", "shift enter",
-			"characters [text]", "quick [shortcut name]",
+			"type [text/code]", "sentence [text]",
 			"terminal [instruction]",
 		}
 		data := MousePageData{
@@ -111,7 +116,6 @@ func runClientSide() error {
 		vii.ExecuteTemplate(w, r, "mouse.html", data)
 	})
 	app.At("GET /signs", func(w http.ResponseWriter, r *http.Request) {
-		// Load symbols from JSON to pass to the template
 		data := CharPageData{
 			Symbols: loadSymbolMap(),
 		}
@@ -142,37 +146,26 @@ func runServerSide() error {
 
 func handleCommand(rawCommand string) {
 	fmt.Printf("Raw Input: %s\n", rawCommand)
-	cmdKey := "control"
-	if runtime.GOOS == "darwin" {
-		cmdKey = "cmd"
-	}
+
 	cmd := strings.ToLower(rawCommand)
 	// Normalizations
 	cmd = strings.ReplaceAll(cmd, "double click", "dclick")
 	cmd = strings.ReplaceAll(cmd, "right click", "rclick")
 	cmd = strings.ReplaceAll(cmd, "triple click", "tclick")
-	cmd = strings.ReplaceAll(cmd, "select all", "selectall")
-	cmd = strings.ReplaceAll(cmd, "copy all", "copyall")
-	cmd = strings.ReplaceAll(cmd, "cut all", "cutall")
-	cmd = strings.ReplaceAll(cmd, "paste all", "pasteall")
-	cmd = strings.ReplaceAll(cmd, "shift enter", "shiftenter")
+	// Note: We don't need to replace "select all" etc anymore because "type select"
+	// or "type copyall" handles it via symbols.json
+
 	parts := strings.Fields(cmd)
 	if len(parts) == 0 {
 		return
 	}
 	verb := parts[0]
 	args := parts[1:]
+
 	switch verb {
-	case "control":
-		phrase := strings.Join(args, " ")
-		handleControlPhrase(phrase)
-	case "command":
-		phrase := strings.Join(args, " ")
-		handleCommandPhrase(phrase)
 	case "terminal":
-		// New feature: Send natural language to Ollama, get Linux command back, paste it
 		phrase := strings.Join(args, " ")
-		go handleTerminalPhrase(phrase) // Run in goroutine to not block if AI is slow
+		go handleTerminalPhrase(phrase)
 	case "teleport":
 		phrase := strings.Join(args, " ")
 		teleportMouse(phrase)
@@ -203,59 +196,6 @@ func handleCommand(rawCommand string) {
 		robotgo.Click("left", false)
 		time.Sleep(time.Millisecond * 100)
 		robotgo.Click("left", false)
-	case "quick":
-		// Pass the full command to parse out the name
-		handleQuick(cmd)
-	case "save":
-		robotgo.KeyTap("s", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "undo":
-		robotgo.KeyTap("z", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "copy":
-		robotgo.KeyTap("c", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "paste":
-		robotgo.KeyTap("v", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "cut":
-		robotgo.KeyTap("x", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "selectall":
-		robotgo.Click()
-		robotgo.KeyTap("a", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "enter":
-		robotgo.KeyTap("enter")
-	case "shiftenter":
-		robotgo.KeyTap("enter", "shift")
-	case "controlone":
-		robotgo.KeyTap("1", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "controlw":
-		robotgo.KeyTap("w", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "copyall":
-		robotgo.Click()
-		robotgo.KeyTap("a", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-		time.Sleep(time.Millisecond * 100)
-		robotgo.KeyTap("c", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "cutall":
-		robotgo.Click()
-		robotgo.KeyTap("a", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-		time.Sleep(time.Millisecond * 100)
-		robotgo.KeyTap("x", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-	case "pasteall":
-		robotgo.Click()
-		robotgo.KeyTap("a", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
-		time.Sleep(time.Millisecond * 100)
-		robotgo.KeyTap("v", cmdKey)
-		robotgo.KeyToggle(cmdKey, "up")
 	case "sentence":
 		rawText := strings.Join(args, " ")
 		if len(rawText) > 0 {
@@ -265,45 +205,57 @@ func handleCommand(rawCommand string) {
 			formattedText = formattedText + ". "
 			pasteText(formattedText)
 		}
-	case "type":
-		symbols := loadSymbolMap()
-		var builder strings.Builder
-		capitalizeNext := false
-
-		for _, token := range args {
-			if strings.ToLower(token) == "capital" {
-				capitalizeNext = true
-				continue
-			}
-
-			var textToAppend string
-			if mappedChar, ok := symbols[token]; ok {
-				textToAppend = mappedChar
-			} else {
-				textToAppend = token
-			}
-
-			if capitalizeNext {
-				r := []rune(textToAppend)
-				if len(r) > 0 {
-					r[0] = unicode.ToUpper(r[0])
-					textToAppend = string(r)
-				}
-				capitalizeNext = false
-			}
-
-			builder.WriteString(textToAppend)
-		}
-		pasteText(builder.String())
 	case "log":
 		fmt.Println("SYSTEM LOG:", strings.Join(args, " "))
 	default:
-		fmt.Printf("Unrecognized command: %s\n", verb)
+		symbols := loadSymbolMap()
+		for _, token := range parts {
+			lowerToken := strings.ToLower(token)
+			if config, ok := symbols[lowerToken]; ok {
+				var actions []KeyAction
+				switch runtime.GOOS {
+				case "darwin":
+					if len(config.Darwin) > 0 {
+						actions = config.Darwin
+					} else {
+						actions = config.Default
+					}
+				case "linux":
+					if len(config.Linux) > 0 {
+						actions = config.Linux
+					} else {
+						actions = config.Default
+					}
+				case "windows":
+					if len(config.Windows) > 0 {
+						actions = config.Windows
+					} else {
+						actions = config.Default
+					}
+				default:
+					actions = config.Default
+				}
+				for _, action := range actions {
+					modifiers := make([]interface{}, len(action.Modifiers))
+					for i, v := range action.Modifiers {
+						modifiers[i] = v
+					}
+					if len(actions) > 1 {
+						time.Sleep(50 * time.Millisecond)
+					}
+					robotgo.KeyTap(action.Key, modifiers...)
+					for _, mod := range action.Modifiers {
+						robotgo.KeyToggle(mod, "up")
+					}
+				}
+			} else {
+				robotgo.TypeStr(token)
+			}
+		}
 	}
 }
 
 // promptOllama sends a prompt to the running Ollama instance and returns the response text.
-// This is reusable for any future AI features.
 func promptOllama(prompt string) (string, error) {
 	reqBody := OllamaRequest{
 		Model:  OllamaModel,
@@ -340,12 +292,9 @@ func promptOllama(prompt string) (string, error) {
 }
 
 // handleTerminalPhrase specifically asks Ollama to generate a Linux command
-// and then pastes that command to the user's active window.
 func handleTerminalPhrase(phrase string) {
 	fmt.Printf("Generating terminal command for: %s\n", phrase)
 
-	// We construct a specific system prompt to ensure we get ONLY the command
-	// and not a conversational explanation.
 	systemInstruction := "You are a Linux command generator. Output ONLY the raw command executable for the following request. Do not include markdown formatting, backticks, or explanations. Do not include the preceding $ sign."
 	fullPrompt := fmt.Sprintf("%s\nRequest: %s", systemInstruction, phrase)
 
@@ -355,7 +304,6 @@ func handleTerminalPhrase(phrase string) {
 		return
 	}
 
-	// Clean up response just in case (remove backticks, extra whitespace)
 	cleanResponse := strings.TrimSpace(response)
 	cleanResponse = strings.Trim(cleanResponse, "`")
 	cleanResponse = strings.TrimSpace(cleanResponse)
@@ -364,53 +312,8 @@ func handleTerminalPhrase(phrase string) {
 	pasteText(cleanResponse)
 }
 
-// handleQuick processes shortcuts from shortcuts.json
-func handleQuick(command string) {
-	// command comes in as "quick new tab", "quick save", etc.
-	// Strip "quick " prefix
-	target := strings.TrimSpace(strings.TrimPrefix(command, "quick"))
-
-	shortcuts := loadShortcutsMap()
-	fmt.Println(shortcuts)
-	if sc, ok := shortcuts[target]; ok {
-		// Convert the modifiers for RobotGo
-		// RobotGo accepts KeyTap(key, args ...interface{})
-		var args []interface{}
-		for _, m := range sc.Modifiers {
-			// Handle cross-platform "command" key
-			if m == "command" {
-				if runtime.GOOS == "darwin" {
-					args = append(args, "cmd")
-				} else {
-					args = append(args, "control")
-				}
-			} else {
-				args = append(args, m)
-			}
-		}
-
-		fmt.Printf("Executing Quick Command: %s -> Key: %s, Mods: %v\n", target, sc.Key, args)
-		robotgo.KeyTap(sc.Key, args...)
-	} else {
-		fmt.Printf("Quick command not found: %s\n", target)
-	}
-}
-
-func loadShortcutsMap() map[string]Shortcut {
-	shortcuts := make(map[string]Shortcut)
-	fileBytes, err := os.ReadFile("shortcuts.json")
-	if err != nil {
-		fmt.Println("Error reading shortcuts.json:", err)
-		return shortcuts
-	}
-	if err := json.Unmarshal(fileBytes, &shortcuts); err != nil {
-		fmt.Println("Error parsing shortcuts.json:", err)
-	}
-	return shortcuts
-}
-
-func loadSymbolMap() map[string]string {
-	symbols := make(map[string]string)
+func loadSymbolMap() map[string]SymbolConfig {
+	symbols := make(map[string]SymbolConfig)
 	fileBytes, err := os.ReadFile("symbols.json")
 	if err != nil {
 		fmt.Println("Error reading symbols.json:", err)
@@ -541,41 +444,5 @@ func handleScroll(command string) {
 		robotgo.Scroll(val, 0)
 	default:
 		fmt.Printf("Unknown scroll direction: %s\n", direction)
-	}
-}
-
-func handleCommandPhrase(command string) {
-	parts := strings.Fields(command)
-	if len(parts) < 1 {
-		fmt.Println("Cmd command requires a keyword")
-		return
-	}
-	key := strings.Join(parts[1:], " ")
-	switch key {
-	case "1":
-		robotgo.KeyTap("1", "cmd")
-		robotgo.KeyToggle("cmd", "up")
-	case "one":
-		robotgo.KeyTap("1", "cmd")
-		robotgo.KeyToggle("cmd", "up")
-	default:
-	}
-}
-
-func handleControlPhrase(command string) {
-	parts := strings.Fields(command)
-	if len(parts) < 1 {
-		fmt.Println("Control command requires a keyword")
-		return
-	}
-	key := strings.Join(parts[1:], " ")
-	switch key {
-	case "1":
-		robotgo.KeyTap("1", "control")
-		robotgo.KeyToggle("control", "up")
-	case "one":
-		robotgo.KeyTap("1", "control")
-		robotgo.KeyToggle("control", "up")
-	default:
 	}
 }
