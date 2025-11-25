@@ -188,7 +188,7 @@
       { "key": "backspace", "modifiers": ["control"] }
     ],
     "darwin": [
-      { "key": "backspace", "modifiers": ["cmd"] }
+      { "key": "backspace", "modifiers": ["option"] }
     ]
   },
 "doubles": {
