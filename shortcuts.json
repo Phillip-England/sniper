@@ -191,14 +191,14 @@
       { "key": "backspace", "modifiers": ["cmd"] }
     ]
   },
-"string": {
+"doubles": {
     "default": [
       { "key": "'", "modifiers": ["shift"] },
       { "key": "'", "modifiers": ["shift"] },
       { "key": "left" }
     ]
   },
-  "rune": {
+  "singles": {
     "default": [
       { "key": "'" },
       { "key": "'" },

@@ -376,20 +376,20 @@ func handleCommand(rawCommand string) {
 			time.Sleep(50 * time.Millisecond)
 		}
 
-case "batch":
-    fullBatch := strings.Join(args, " ")
-    lastBatchCommand = fullBatch
-    subCommands := strings.Split(fullBatch, " then ")
-    for _, subCmd := range subCommands {
-      cleanCmd := strings.TrimSpace(subCmd)
-      if cleanCmd != "" {
-        handleCommand(cleanCmd)
-        // FIX: Force release modifiers after every step in a batch
-        resetModifiers() 
-        // Optional: Increase sleep slightly if it still sticks
-        time.Sleep(300 * time.Millisecond) 
-      }
-    }
+	case "batch":
+		fullBatch := strings.Join(args, " ")
+		lastBatchCommand = fullBatch
+		subCommands := strings.Split(fullBatch, " then ")
+		for _, subCmd := range subCommands {
+			cleanCmd := strings.TrimSpace(subCmd)
+			if cleanCmd != "" {
+				handleCommand(cleanCmd)
+				// FIX: Force release modifiers after every step in a batch
+				resetModifiers()
+				// Optional: Increase sleep slightly if it still sticks
+				time.Sleep(300 * time.Millisecond)
+			}
+		}
 
 	case "script":
 		if len(args) == 0 {
@@ -540,28 +540,33 @@ case "batch":
 					actions = config.Default
 				}
 				// ... inside the default case ...
-        for _, action := range actions {
-          modifiers := make([]interface{}, len(action.Modifiers))
-          for i, v := range action.Modifiers {
-            modifiers[i] = v
-          }
-          
-          // Original sleep
-          if len(actions) > 1 {
-            time.Sleep(50 * time.Millisecond)
-          }
-          
-          robotgo.KeyTap(action.Key, modifiers...)
-          
-          // FIX: If this action used modifiers, give the OS a tiny breath 
-          // to register the "Key Up" before the loop continues
-          if len(modifiers) > 0 {
-             time.Sleep(50 * time.Millisecond)
-          }
-        }
+				for _, action := range actions {
+					modifiers := make([]interface{}, len(action.Modifiers))
+					for i, v := range action.Modifiers {
+						modifiers[i] = v
+					}
+
+					// Original sleep to space out actions
+					if len(actions) > 1 {
+						time.Sleep(50 * time.Millisecond)
+					}
+
+					robotgo.KeyTap(action.Key, modifiers...)
+
+					// FIX: If this specific action used modifiers, we must force a reset
+					// BEFORE the loop iterates to the next action (like the left arrow).
+					if len(modifiers) > 0 {
+						resetModifiers()
+						time.Sleep(50 * time.Millisecond)
+					}
+				}
 			} else {
 				robotgo.TypeStr(token)
 			}
+
+			// Global word-level reset (Already present)
+			resetModifiers()
+			time.Sleep(20 * time.Millisecond)
 		}
 	}
 }
