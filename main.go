@@ -461,42 +461,27 @@ func handleCommand(rawCommand string) {
 	case "log":
 		fmt.Println("SYSTEM LOG:", strings.Join(args, " "))
 
-	// --- NEW MODIFIER BRANCHES ---
-	case "control", "ctrl", "command", "cmd", "shift", "alt", "option":
-		// This branch handles complex keystrokes initiated by a modifier.
-		// Logic:
-		// 1. Scan parts [0...n-1] for all modifiers.
-		// 2. Treat parts [n] as the target key.
-
-		if len(parts) < 2 {
-			fmt.Println("Modifier command requires a target key (e.g., 'control s')")
+	// --- UNIFIED MODIFIER BRANCH ---
+	case "control", "ctrl", "command", "cmd", "shift", "alt", "option", "function":
+		// Case 1: Single Key Press (e.g. "command")
+		if len(parts) == 1 {
+			if key := getModifierKey(verb); key != "" {
+				fmt.Printf("Single Key Tap: %s\n", key)
+				robotgo.KeyTap(key)
+			}
 			return
 		}
 
+		// Case 2: Modifier Combinations (e.g. "command s")
 		targetToken := parts[len(parts)-1]
 		modifierTokens := parts[:len(parts)-1]
 
 		var activeModifiers []interface{}
 
-		// Map words to robotgo modifiers
-		for _, mod := range modifierTokens {
-			switch mod {
-			case "control", "ctrl":
-				if runtime.GOOS == "darwin" {
-					activeModifiers = append(activeModifiers, "lctrl")
-				} else {
-					activeModifiers = append(activeModifiers, "control")
-				}
-			case "command", "cmd":
-				if runtime.GOOS == "darwin" {
-					activeModifiers = append(activeModifiers, "cmd")
-				} else {
-					activeModifiers = append(activeModifiers, "control")
-				}
-			case "shift":
-				activeModifiers = append(activeModifiers, "shift")
-			case "alt", "option":
-				activeModifiers = append(activeModifiers, "alt")
+		// Accumulate all modifiers in the command string using unified helper
+		for _, token := range modifierTokens {
+			if key := getModifierKey(token); key != "" {
+				activeModifiers = append(activeModifiers, key)
 			}
 		}
 
@@ -520,7 +505,7 @@ func handleCommand(rawCommand string) {
 
 			if len(actions) > 0 {
 				keyToPress = actions[0].Key
-				// Append inherent modifiers (e.g. colon = shift + ;)
+				// Append inherent modifiers from alphabet config (e.g. colon = shift + ;)
 				if len(actions[0].Modifiers) > 0 {
 					for _, m := range actions[0].Modifiers {
 						activeModifiers = append(activeModifiers, m)
@@ -546,10 +531,16 @@ func handleCommand(rawCommand string) {
 
 	default:
 		// --- DEFAULT BRANCH (Standard Alphabet Typing) ---
-		// Reverted to loop-based typing for standard execution.
-		// This does NOT attempt to parse modifiers.
 		alphabet := loadAlphabet()
+		capitalizeNext := false
+
 		for _, token := range parts {
+			// Check if we need to set the capitalize flag for the next word
+			if strings.ToLower(token) == "capital" {
+				capitalizeNext = true
+				continue
+			}
+
 			lowerToken := strings.ToLower(token)
 			if config, ok := alphabet[lowerToken]; ok {
 				var actions []KeyAction
@@ -570,6 +561,11 @@ func handleCommand(rawCommand string) {
 						modifiers[i] = v
 					}
 
+					// If the previous word was "capital", add Shift to modifiers
+					if capitalizeNext {
+						modifiers = append(modifiers, "shift")
+					}
+
 					robotgo.KeyTap(action.Key, modifiers...)
 
 					// Reset inside loop for safety between characters
@@ -580,8 +576,19 @@ func handleCommand(rawCommand string) {
 				}
 			} else {
 				// Type raw word if not in alphabet
-				robotgo.TypeStr(token)
+				textToType := token
+				if capitalizeNext {
+					r := []rune(textToType)
+					if len(r) > 0 {
+						r[0] = unicode.ToUpper(r[0])
+						textToType = string(r)
+					}
+				}
+				robotgo.TypeStr(textToType)
 			}
+
+			// Reset the capitalization flag after the word is typed
+			capitalizeNext = false
 			// Space out words slightly
 			time.Sleep(20 * time.Millisecond)
 		}
@@ -931,4 +938,32 @@ func resetModifiers() {
 		robotgo.KeyToggle("control", "up")
 	}
 	robotgo.KeyToggle("alt", "up")
+}
+
+// getModifierKey returns the robotgo key identifier for a given spoken verb.
+// This unifies key mapping logic for both single presses and combinations.
+func getModifierKey(verb string) string {
+	switch verb {
+	case "control", "ctrl":
+		if runtime.GOOS == "darwin" {
+			return "lctrl"
+		}
+		return "control"
+	case "command", "cmd":
+		if runtime.GOOS == "darwin" {
+			return "cmd"
+		}
+		// Maps "command" to "control" on non-Mac systems for cross-platform shortcut compatibility (e.g. Cmd+S -> Ctrl+S)
+		return "control"
+	case "shift":
+		return "shift"
+	case "alt":
+		return "alt"
+	case "option":
+		return "lalt"
+	case "function":
+		return ""
+	default:
+		return ""
+	}
 }
