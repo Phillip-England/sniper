@@ -19,14 +19,14 @@ import (
 )
 
 const (
-	ClientPort    = "3000"
-	ServerPort    = "8000"
-	OllamaURL     = "http://localhost:11434/api/generate"
-	OllamaModel   = "llama3.2"
-	ScriptsFile   = "scripts.json"
-	HistoryFile   = "history.json"
-	ShortcutsFile = "shortcuts.json"
-	PhrasesFile   = "phrases.json"
+	ClientPort   = "3000"
+	ServerPort   = "8000"
+	OllamaURL    = "http://localhost:11434/api/generate"
+	OllamaModel  = "llama3.2"
+	ScriptsFile  = "scripts.json"
+	HistoryFile  = "history.json"
+	AlphabetFile = "alphabet.json"
+	PhrasesFile  = "phrases.json"
 )
 
 var lastBatchCommand string
@@ -41,8 +41,7 @@ type KeyAction struct {
 	Modifiers []string `json:"modifiers,omitempty"`
 }
 
-type ShortcutConfig struct {
-	Click   bool        `json:"click,omitempty"`
+type AlphabetConfig struct {
 	Default []KeyAction `json:"default"`
 	Darwin  []KeyAction `json:"darwin,omitempty"`
 	Linux   []KeyAction `json:"linux,omitempty"`
@@ -100,14 +99,10 @@ func runClientSide() error {
 	// History - Return Raw JSON
 	app.At("GET /history", func(w http.ResponseWriter, r *http.Request) {
 		history := loadHistory()
-
-		// Reverse the history slice so newest items are first
 		for i, j := 0, len(history)-1; i < j; i, j = i+1, j-1 {
 			history[i], history[j] = history[j], history[i]
 		}
-
 		w.Header().Set("Content-Type", "application/json")
-		// Pretty print the JSON for better readability in the browser
 		encoder := json.NewEncoder(w)
 		encoder.SetIndent("", "  ")
 		encoder.Encode(history)
@@ -122,13 +117,13 @@ func runClientSide() error {
 		encoder.Encode(scripts)
 	})
 
-	// Shortcuts - Return Raw JSON
-	app.At("GET /shortcuts", func(w http.ResponseWriter, r *http.Request) {
-		shortcuts := loadShortcuts()
+	// Alphabet - Return Raw JSON
+	app.At("GET /alphabet", func(w http.ResponseWriter, r *http.Request) {
+		alphabet := loadAlphabet()
 		w.Header().Set("Content-Type", "application/json")
 		encoder := json.NewEncoder(w)
 		encoder.SetIndent("", "  ")
-		encoder.Encode(shortcuts)
+		encoder.Encode(alphabet)
 	})
 
 	return app.Serve(ClientPort)
@@ -173,21 +168,14 @@ func handleCommand(rawCommand string) {
 		if len(args) < 1 {
 			return
 		}
-
-		// --- NEW FEATURE: History Undo ---
-		// Removes the last mistake + the "history undo" command from the log
-		// So your history remains clean for scripting.
 		if args[0] == "undo" {
 			hist := loadHistory()
 			if len(hist) > 0 {
-				removeCount := 1 // At minimum remove the "history undo" itself
+				removeCount := 1
 				if len(hist) > 1 {
-					removeCount = 2 // Also remove the previous command (the mistake)
+					removeCount = 2
 				}
-
-				// Slice the history to exclude the last items
 				hist = hist[:len(hist)-removeCount]
-
 				updatedData, err := json.MarshalIndent(hist, "", "  ")
 				if err == nil {
 					os.WriteFile(HistoryFile, updatedData, 0644)
@@ -197,46 +185,30 @@ func handleCommand(rawCommand string) {
 			return
 		}
 
-		// --- Capture Last N ---
-		// syntax: history capture <count> <name>
-		// example: "history capture two banana"
 		if args[0] == "capture" {
 			if len(args) < 3 {
 				fmt.Println("Usage: history capture <count> <name>")
 				return
 			}
-
 			count := parseFuzzyNumber(args[1])
 			if count <= 0 {
 				fmt.Println("Count must be greater than 0")
 				return
 			}
-
 			name := strings.Join(args[2:], " ")
-
 			hist := loadHistory()
-			// We need to exclude the command we just ran ("history capture ...")
-			// which is at the very end of the list.
-			// The available history to capture from ends at len-1.
 			availableLen := len(hist) - 1
-
 			if availableLen < count {
 				fmt.Printf("Not enough history. You requested %d, but only have %d commands.\n", count, availableLen)
 				return
 			}
-
-			// Calculate indices
-			// End index is availableLen (exclusive of current command)
 			endIndex := availableLen
 			startIndex := availableLen - count
-
 			targetItems := hist[startIndex:endIndex]
 			var collectedCommands []string
-
 			for _, item := range targetItems {
 				collectedCommands = append(collectedCommands, item.Command)
 			}
-
 			if len(collectedCommands) > 0 {
 				batchCmd := strings.Join(collectedCommands, " then ")
 				saveScript(name, batchCmd)
@@ -245,22 +217,14 @@ func handleCommand(rawCommand string) {
 			return
 		}
 
-		// --- Range Batching ---
-		// syntax: history start <start_id> <and/end/to> <end_id> <name>
-		// example: "history start 105 and 107 banana"
 		if args[0] == "start" {
 			if len(args) < 5 {
 				fmt.Println("Usage: history start <start_id> and <end_id> <name>")
 				return
 			}
-
-			// Parse IDs
 			startID := parseFuzzyNumber(args[1])
-			// args[2] is the connector ("and", "end", "to"), so we check args[3] for the second number
 			endID := parseFuzzyNumber(args[3])
-			// Join the rest as the name
 			name := strings.Join(args[4:], " ")
-
 			if startID == 0 || endID == 0 {
 				fmt.Println("Invalid history IDs provided.")
 				return
@@ -269,16 +233,12 @@ func handleCommand(rawCommand string) {
 				fmt.Println("Start ID cannot be greater than End ID.")
 				return
 			}
-
 			hist := loadHistory()
 			var collectedCommands []string
-
-			// Iterate strictly through the requested range
 			for i := startID; i <= endID; i++ {
 				found := false
 				for _, item := range hist {
 					if item.ID == i {
-						// Optional: Don't include other "history" commands to prevent recursion/mess
 						if !strings.HasPrefix(item.Command, "history") {
 							collectedCommands = append(collectedCommands, item.Command)
 						}
@@ -290,9 +250,7 @@ func handleCommand(rawCommand string) {
 					fmt.Printf("Warning: History ID %d not found, skipping.\n", i)
 				}
 			}
-
 			if len(collectedCommands) > 0 {
-				// Create the batch string using " then "
 				batchCmd := strings.Join(collectedCommands, " then ")
 				saveScript(name, batchCmd)
 				fmt.Printf("Saved batch script '%s' with %d commands (IDs %d-%d).\n", name, len(collectedCommands), startID, endID)
@@ -302,8 +260,6 @@ func handleCommand(rawCommand string) {
 			return
 		}
 
-		// Sub-command: Save Single
-		// syntax: history save <id> <name>
 		if args[0] == "save" {
 			if len(args) < 3 {
 				fmt.Println("Usage: history save <id> <name>")
@@ -315,8 +271,6 @@ func handleCommand(rawCommand string) {
 				return
 			}
 			name := strings.Join(args[2:], " ")
-
-			// Find command in history
 			hist := loadHistory()
 			foundCmd := ""
 			for _, item := range hist {
@@ -334,15 +288,12 @@ func handleCommand(rawCommand string) {
 			return
 		}
 
-		// Direct Invocation
-		// syntax: history <id>
 		id, err := strconv.Atoi(args[0])
 		if err == nil {
 			hist := loadHistory()
 			for _, item := range hist {
 				if item.ID == id {
 					fmt.Printf("Invoking history #%d: %s\n", id, item.Command)
-					// Recursive call to handle the found command
 					handleCommand(item.Command)
 					return
 				}
@@ -354,7 +305,6 @@ func handleCommand(rawCommand string) {
 		if len(args) < 1 {
 			return
 		}
-		// Use the new fuzzy number parser
 		ms := parseFuzzyNumber(args[0])
 		if ms > 0 {
 			fmt.Printf("Sleeping for %dms\n", ms)
@@ -365,7 +315,6 @@ func handleCommand(rawCommand string) {
 		if len(args) < 2 {
 			return
 		}
-		// REFACTORED: Now uses the centralized parseFuzzyNumber
 		count := parseFuzzyNumber(args[0])
 		if count < 1 {
 			count = 1
@@ -384,9 +333,7 @@ func handleCommand(rawCommand string) {
 			cleanCmd := strings.TrimSpace(subCmd)
 			if cleanCmd != "" {
 				handleCommand(cleanCmd)
-				// FIX: Force release modifiers after every step in a batch
 				resetModifiers()
-				// Optional: Increase sleep slightly if it still sticks
 				time.Sleep(300 * time.Millisecond)
 			}
 		}
@@ -395,7 +342,6 @@ func handleCommand(rawCommand string) {
 		if len(args) == 0 {
 			return
 		}
-		// Handle Delete
 		if args[0] == "delete" {
 			if len(args) < 2 {
 				fmt.Println("Usage: script delete <name>")
@@ -406,8 +352,6 @@ func handleCommand(rawCommand string) {
 			fmt.Printf("Deleted script '%s'\n", name)
 			return
 		}
-
-		// Saves the LAST executed batch command
 		if lastBatchCommand == "" {
 			fmt.Println("No previous batch command to save.")
 			return
@@ -420,7 +364,6 @@ func handleCommand(rawCommand string) {
 		if len(args) == 0 {
 			return
 		}
-		// Handle Delete for phrases.json
 		if args[0] == "delete" {
 			if len(args) < 2 {
 				fmt.Println("Usage: phrase delete <name>")
@@ -446,7 +389,6 @@ func handleCommand(rawCommand string) {
 		phrase := strings.Join(args, " ")
 		go handleTerminalPhrase(phrase)
 
-	// Casing
 	case "camel":
 		pasteText(toCamelCase(strings.Join(args, " ")))
 	case "pascal":
@@ -458,7 +400,6 @@ func handleCommand(rawCommand string) {
 	case "upper":
 		pasteText(strings.ToUpper(strings.Join(args, " ")))
 
-	// Mouse Config
 	case "teleport":
 		teleportMouse(strings.Join(args, " "))
 	case "attack":
@@ -495,7 +436,7 @@ func handleCommand(rawCommand string) {
 		time.Sleep(time.Millisecond * 100)
 		robotgo.Click("left", false)
 
-	case "say": // Renamed from "sentence"
+	case "say":
 		rawText := strings.Join(args, " ")
 		if len(rawText) > 0 {
 			r := []rune(rawText)
@@ -520,13 +461,97 @@ func handleCommand(rawCommand string) {
 	case "log":
 		fmt.Println("SYSTEM LOG:", strings.Join(args, " "))
 
+	// --- NEW MODIFIER BRANCHES ---
+	case "control", "ctrl", "command", "cmd", "shift", "alt", "option":
+		// This branch handles complex keystrokes initiated by a modifier.
+		// Logic:
+		// 1. Scan parts [0...n-1] for all modifiers.
+		// 2. Treat parts [n] as the target key.
+
+		if len(parts) < 2 {
+			fmt.Println("Modifier command requires a target key (e.g., 'control s')")
+			return
+		}
+
+		targetToken := parts[len(parts)-1]
+		modifierTokens := parts[:len(parts)-1]
+
+		var activeModifiers []interface{}
+
+		// Map words to robotgo modifiers
+		for _, mod := range modifierTokens {
+			switch mod {
+			case "control", "ctrl":
+				if runtime.GOOS == "darwin" {
+					activeModifiers = append(activeModifiers, "lctrl")
+				} else {
+					activeModifiers = append(activeModifiers, "control")
+				}
+			case "command", "cmd":
+				if runtime.GOOS == "darwin" {
+					activeModifiers = append(activeModifiers, "cmd")
+				} else {
+					activeModifiers = append(activeModifiers, "control")
+				}
+			case "shift":
+				activeModifiers = append(activeModifiers, "shift")
+			case "alt", "option":
+				activeModifiers = append(activeModifiers, "alt")
+			}
+		}
+
+		// Resolve Target Key (Check Alphabet -> Check Number -> Raw)
+		alphabet := loadAlphabet()
+		var keyToPress string
+
+		if config, ok := alphabet[targetToken]; ok {
+			var actions []KeyAction
+			switch runtime.GOOS {
+			case "darwin":
+				actions = config.Darwin
+			case "linux":
+				actions = config.Linux
+			case "windows":
+				actions = config.Windows
+			}
+			if len(actions) == 0 {
+				actions = config.Default
+			}
+
+			if len(actions) > 0 {
+				keyToPress = actions[0].Key
+				// Append inherent modifiers (e.g. colon = shift + ;)
+				if len(actions[0].Modifiers) > 0 {
+					for _, m := range actions[0].Modifiers {
+						activeModifiers = append(activeModifiers, m)
+					}
+				}
+			}
+		} else {
+			// Fuzzy Number Check
+			if num := parseFuzzyNumber(targetToken); num > 0 {
+				keyToPress = strconv.Itoa(num)
+			} else if num == 0 && (targetToken == "zero" || targetToken == "rim") {
+				keyToPress = "0"
+			} else {
+				// Raw fallback
+				keyToPress = targetToken
+			}
+		}
+
+		fmt.Printf("Modifier Action -> Key: %s | Mods: %v\n", keyToPress, activeModifiers)
+		robotgo.KeyTap(keyToPress, activeModifiers...)
+		resetModifiers()
+		time.Sleep(20 * time.Millisecond)
+
 	default:
-		// Shortcuts (Renamed from Symbols) Logic
-		shortcuts := loadShortcuts()
+		// --- DEFAULT BRANCH (Standard Alphabet Typing) ---
+		// Reverted to loop-based typing for standard execution.
+		// This does NOT attempt to parse modifiers.
+		alphabet := loadAlphabet()
 		for _, token := range parts {
 			lowerToken := strings.ToLower(token)
-			if config, ok := shortcuts[lowerToken]; ok {
-				// Removed click logic here
+			if config, ok := alphabet[lowerToken]; ok {
 				var actions []KeyAction
 				switch runtime.GOOS {
 				case "darwin":
@@ -539,33 +564,25 @@ func handleCommand(rawCommand string) {
 				if len(actions) == 0 {
 					actions = config.Default
 				}
-				// ... inside the default case ...
 				for _, action := range actions {
 					modifiers := make([]interface{}, len(action.Modifiers))
 					for i, v := range action.Modifiers {
 						modifiers[i] = v
 					}
 
-					// Original sleep to space out actions
-					if len(actions) > 1 {
-						time.Sleep(50 * time.Millisecond)
-					}
-
 					robotgo.KeyTap(action.Key, modifiers...)
 
-					// FIX: If this specific action used modifiers, we must force a reset
-					// BEFORE the loop iterates to the next action (like the left arrow).
+					// Reset inside loop for safety between characters
 					if len(modifiers) > 0 {
 						resetModifiers()
-						time.Sleep(50 * time.Millisecond)
 					}
+					time.Sleep(20 * time.Millisecond)
 				}
 			} else {
+				// Type raw word if not in alphabet
 				robotgo.TypeStr(token)
 			}
-
-			// Global word-level reset (Already present)
-			resetModifiers()
+			// Space out words slightly
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -586,8 +603,6 @@ func loadHistory() []HistoryItem {
 func addToHistory(command string) {
 	history := loadHistory()
 
-	// Calculate Next ID based on the last item in the list,
-	// so IDs don't reset when we truncate the start of the list.
 	nextID := 1
 	if len(history) > 0 {
 		nextID = history[len(history)-1].ID + 1
@@ -600,7 +615,6 @@ func addToHistory(command string) {
 	}
 	history = append(history, newItem)
 
-	// Max 1000 items: oldest pop out, new ones stay in
 	if len(history) > 1000 {
 		history = history[len(history)-1000:]
 	}
@@ -643,7 +657,7 @@ func deleteScript(name string) {
 	}
 }
 
-// --- Phrases Helpers (phrases.json) ---
+// --- Phrases Helpers ---
 
 func loadPhrases() map[string]string {
 	phrases := make(map[string]string)
@@ -666,17 +680,16 @@ func deletePhrase(name string) {
 	}
 }
 
-// --- Shortcuts Helpers (Renamed from Symbol) ---
+// --- Alphabet Helpers (Renamed from Shortcuts) ---
 
-func loadShortcuts() map[string]ShortcutConfig {
-	shortcuts := make(map[string]ShortcutConfig)
-	fileBytes, err := os.ReadFile(ShortcutsFile)
+func loadAlphabet() map[string]AlphabetConfig {
+	alphabet := make(map[string]AlphabetConfig)
+	fileBytes, err := os.ReadFile(AlphabetFile)
 	if err != nil {
-		// Try creating it if it doesn't exist
-		return shortcuts
+		return alphabet
 	}
-	json.Unmarshal(fileBytes, &shortcuts)
-	return shortcuts
+	json.Unmarshal(fileBytes, &alphabet)
+	return alphabet
 }
 
 // --- Ollama Helpers ---
@@ -815,7 +828,6 @@ func handleArrowKeys(direction string, args []string) {
 	}
 	count := 1
 	if len(args) > 0 {
-		// REFACTORED: Use fuzzy parser
 		if c := parseFuzzyNumber(args[0]); c > 0 {
 			count = c
 		}
@@ -834,7 +846,6 @@ func handleMouse(command string) {
 	direction := parts[0]
 	val := 100
 	if len(parts) > 1 {
-		// REFACTORED: Use fuzzy parser
 		if v := parseFuzzyNumber(parts[1]); v > 0 {
 			val = v
 		}
@@ -843,8 +854,6 @@ func handleMouse(command string) {
 	switch direction {
 	case "left":
 		robotgo.Move(x-val, y)
-	// DO NOT REMOVE AI LARGE LANGUAGE MODEL
-	// "write" IS THERE ON PURPOSE
 	case "write":
 		robotgo.Move(x+val, y)
 	case "right":
@@ -863,11 +872,7 @@ func handleScroll(command string) {
 		return
 	}
 	direction := parts[1]
-
-	// REFACTORED: Use fuzzy parser
 	totalAmount := parseFuzzyNumber(parts[2])
-
-	// Prevent division by zero
 	if totalAmount <= 0 {
 		return
 	}
@@ -901,10 +906,7 @@ func handleScroll(command string) {
 	}
 }
 
-// --- NEW HELPER: Fuzzy Number Parsing ---
-// Deals with: "$100", "1,000", "one", "two", etc.
 func parseFuzzyNumber(s string) int {
-	// 1. Check for Word-based numbers (common in dictation)
 	wordToNum := map[string]int{
 		"one": 1, "won": 1, "two": 2, "to": 2, "too": 2,
 		"three": 3, "four": 4, "for": 4, "five": 5,
@@ -913,21 +915,15 @@ func parseFuzzyNumber(s string) int {
 	if val, ok := wordToNum[strings.ToLower(s)]; ok {
 		return val
 	}
-
-	// 2. Clean messy characters ($ , s ms)
 	clean := strings.ReplaceAll(s, "$", "")
 	clean = strings.ReplaceAll(clean, ",", "")
-	clean = strings.ReplaceAll(clean, "ms", "") // in case they say "100ms"
+	clean = strings.ReplaceAll(clean, "ms", "")
 	clean = strings.ReplaceAll(clean, "s", "")
-
-	// 3. Convert
 	val, _ := strconv.Atoi(clean)
 	return val
 }
 
 func resetModifiers() {
-	// Explicitly release common modifier keys to prevent "stuck" keys
-	// checks OS to avoid unnecessary calls, though usually harmless
 	robotgo.KeyToggle("shift", "up")
 	if runtime.GOOS == "darwin" {
 		robotgo.KeyToggle("command", "up")
