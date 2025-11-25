@@ -19,44 +19,46 @@ import (
 )
 
 const (
-	ClientPort  = "3000"
-	ServerPort  = "8000"
-	OllamaURL   = "http://localhost:11434/api/generate"
-	OllamaModel = "llama3.2" // Ensure you have run: ollama pull llama3.2
+	ClientPort    = "3000"
+	ServerPort    = "8000"
+	OllamaURL     = "http://localhost:11434/api/generate"
+	OllamaModel   = "llama3.2"
+	ScriptsFile   = "scripts.json"
+	HistoryFile   = "history.json"
+	ShortcutsFile = "shortcuts.json"
+	PhrasesFile   = "phrases.json"
 )
+
+var lastBatchCommand string
 
 type MousePoint struct {
 	X int `json:"x"`
 	Y int `json:"y"`
 }
 
-type MousePageData struct {
-	Locations map[string]MousePoint
-	Commands  []string
-}
-
-type CharPageData struct {
-	Symbols map[string]SymbolConfig
-}
-
-// KeyAction defines the specific key press and modifiers
 type KeyAction struct {
 	Key       string   `json:"key"`
 	Modifiers []string `json:"modifiers,omitempty"`
 }
 
-// SymbolConfig now supports arrays of actions to handle sequences (macros)
-type SymbolConfig struct {
+type ShortcutConfig struct {
+	Click   bool        `json:"click,omitempty"`
 	Default []KeyAction `json:"default"`
 	Darwin  []KeyAction `json:"darwin,omitempty"`
 	Linux   []KeyAction `json:"linux,omitempty"`
 	Windows []KeyAction `json:"windows,omitempty"`
 }
 
-// Ollama structs for API communication
+type HistoryItem struct {
+	ID        int    `json:"id"`
+	Command   string `json:"command"`
+	Timestamp string `json:"timestamp"`
+}
+
 type OllamaRequest struct {
 	Model  string `json:"model"`
 	Prompt string `json:"prompt"`
+	System string `json:"system,omitempty"`
 	Stream bool   `json:"stream"`
 }
 
@@ -90,37 +92,45 @@ func runClientSide() error {
 	if err := app.Templates("./templates", nil); err != nil {
 		return err
 	}
+
 	app.At("GET /", func(w http.ResponseWriter, r *http.Request) {
 		vii.ExecuteTemplate(w, r, "index.html", nil)
 	})
-	app.At("GET /mouse", func(w http.ResponseWriter, r *http.Request) {
-		positions := make(map[string]MousePoint)
-		fileBytes, err := os.ReadFile("mouse_config.json")
-		if err == nil {
-			json.Unmarshal(fileBytes, &positions)
+
+	// History - Return Raw JSON
+	app.At("GET /history", func(w http.ResponseWriter, r *http.Request) {
+		history := loadHistory()
+
+		// Reverse the history slice so newest items are first
+		for i, j := 0, len(history)-1; i < j; i, j = i+1, j-1 {
+			history[i], history[j] = history[j], history[i]
 		}
-		// Simplified command list for the UI
-		staticCmds := []string{
-			"teleport [name]", "attack [name]",
-			"remember [name]", "forget [name]",
-			"click", "rclick", "tclick",
-			"left [dist]", "right [dist]", "up [dist]", "down [dist]",
-			"scroll up [dist]", "scroll down [dist]",
-			"type [text/code]", "sentence [text]",
-			"terminal [instruction]",
-		}
-		data := MousePageData{
-			Locations: positions,
-			Commands:  staticCmds,
-		}
-		vii.ExecuteTemplate(w, r, "mouse.html", data)
+
+		w.Header().Set("Content-Type", "application/json")
+		// Pretty print the JSON for better readability in the browser
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		encoder.Encode(history)
 	})
-	app.At("GET /signs", func(w http.ResponseWriter, r *http.Request) {
-		data := CharPageData{
-			Symbols: loadSymbolMap(),
-		}
-		vii.ExecuteTemplate(w, r, "signs.html", data)
+
+	// Scripts - Return Raw JSON
+	app.At("GET /scripts", func(w http.ResponseWriter, r *http.Request) {
+		scripts := loadScripts()
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		encoder.Encode(scripts)
 	})
+
+	// Shortcuts - Return Raw JSON
+	app.At("GET /shortcuts", func(w http.ResponseWriter, r *http.Request) {
+		shortcuts := loadShortcuts()
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		encoder.Encode(shortcuts)
+	})
+
 	return app.Serve(ClientPort)
 }
 
@@ -147,14 +157,10 @@ func runServerSide() error {
 func handleCommand(rawCommand string) {
 	fmt.Printf("Raw Input: %s\n", rawCommand)
 
-	cmd := strings.ToLower(rawCommand)
-	// Normalizations
-	cmd = strings.ReplaceAll(cmd, "double click", "dclick")
-	cmd = strings.ReplaceAll(cmd, "right click", "rclick")
-	cmd = strings.ReplaceAll(cmd, "triple click", "tclick")
-	// Note: We don't need to replace "select all" etc anymore because "type select"
-	// or "type copyall" handles it via symbols.json
+	// Log to History first
+	addToHistory(rawCommand)
 
+	cmd := strings.ToLower(rawCommand)
 	parts := strings.Fields(cmd)
 	if len(parts) == 0 {
 		return
@@ -163,25 +169,317 @@ func handleCommand(rawCommand string) {
 	args := parts[1:]
 
 	switch verb {
+	case "history":
+		if len(args) < 1 {
+			return
+		}
+
+		// --- NEW FEATURE: History Undo ---
+		// Removes the last mistake + the "history undo" command from the log
+		// So your history remains clean for scripting.
+		if args[0] == "undo" {
+			hist := loadHistory()
+			if len(hist) > 0 {
+				removeCount := 1 // At minimum remove the "history undo" itself
+				if len(hist) > 1 {
+					removeCount = 2 // Also remove the previous command (the mistake)
+				}
+
+				// Slice the history to exclude the last items
+				hist = hist[:len(hist)-removeCount]
+
+				updatedData, err := json.MarshalIndent(hist, "", "  ")
+				if err == nil {
+					os.WriteFile(HistoryFile, updatedData, 0644)
+					fmt.Printf("HISTORY LOG: Removed last %d items.\n", removeCount)
+				}
+			}
+			return
+		}
+
+		// --- Capture Last N ---
+		// syntax: history capture <count> <name>
+		// example: "history capture two banana"
+		if args[0] == "capture" {
+			if len(args) < 3 {
+				fmt.Println("Usage: history capture <count> <name>")
+				return
+			}
+
+			count := parseFuzzyNumber(args[1])
+			if count <= 0 {
+				fmt.Println("Count must be greater than 0")
+				return
+			}
+
+			name := strings.Join(args[2:], " ")
+
+			hist := loadHistory()
+			// We need to exclude the command we just ran ("history capture ...")
+			// which is at the very end of the list.
+			// The available history to capture from ends at len-1.
+			availableLen := len(hist) - 1
+
+			if availableLen < count {
+				fmt.Printf("Not enough history. You requested %d, but only have %d commands.\n", count, availableLen)
+				return
+			}
+
+			// Calculate indices
+			// End index is availableLen (exclusive of current command)
+			endIndex := availableLen
+			startIndex := availableLen - count
+
+			targetItems := hist[startIndex:endIndex]
+			var collectedCommands []string
+
+			for _, item := range targetItems {
+				collectedCommands = append(collectedCommands, item.Command)
+			}
+
+			if len(collectedCommands) > 0 {
+				batchCmd := strings.Join(collectedCommands, " then ")
+				saveScript(name, batchCmd)
+				fmt.Printf("Captured last %d commands into script '%s'.\n", count, name)
+			}
+			return
+		}
+
+		// --- Range Batching ---
+		// syntax: history start <start_id> <and/end/to> <end_id> <name>
+		// example: "history start 105 and 107 banana"
+		if args[0] == "start" {
+			if len(args) < 5 {
+				fmt.Println("Usage: history start <start_id> and <end_id> <name>")
+				return
+			}
+
+			// Parse IDs
+			startID := parseFuzzyNumber(args[1])
+			// args[2] is the connector ("and", "end", "to"), so we check args[3] for the second number
+			endID := parseFuzzyNumber(args[3])
+			// Join the rest as the name
+			name := strings.Join(args[4:], " ")
+
+			if startID == 0 || endID == 0 {
+				fmt.Println("Invalid history IDs provided.")
+				return
+			}
+			if startID > endID {
+				fmt.Println("Start ID cannot be greater than End ID.")
+				return
+			}
+
+			hist := loadHistory()
+			var collectedCommands []string
+
+			// Iterate strictly through the requested range
+			for i := startID; i <= endID; i++ {
+				found := false
+				for _, item := range hist {
+					if item.ID == i {
+						// Optional: Don't include other "history" commands to prevent recursion/mess
+						if !strings.HasPrefix(item.Command, "history") {
+							collectedCommands = append(collectedCommands, item.Command)
+						}
+						found = true
+						break
+					}
+				}
+				if !found {
+					fmt.Printf("Warning: History ID %d not found, skipping.\n", i)
+				}
+			}
+
+			if len(collectedCommands) > 0 {
+				// Create the batch string using " then "
+				batchCmd := strings.Join(collectedCommands, " then ")
+				saveScript(name, batchCmd)
+				fmt.Printf("Saved batch script '%s' with %d commands (IDs %d-%d).\n", name, len(collectedCommands), startID, endID)
+			} else {
+				fmt.Println("No valid commands found in that range.")
+			}
+			return
+		}
+
+		// Sub-command: Save Single
+		// syntax: history save <id> <name>
+		if args[0] == "save" {
+			if len(args) < 3 {
+				fmt.Println("Usage: history save <id> <name>")
+				return
+			}
+			id, err := strconv.Atoi(args[1])
+			if err != nil {
+				fmt.Println("Invalid ID")
+				return
+			}
+			name := strings.Join(args[2:], " ")
+
+			// Find command in history
+			hist := loadHistory()
+			foundCmd := ""
+			for _, item := range hist {
+				if item.ID == id {
+					foundCmd = item.Command
+					break
+				}
+			}
+			if foundCmd != "" {
+				saveScript(name, foundCmd)
+				fmt.Printf("Saved history #%d as script '%s'\n", id, name)
+			} else {
+				fmt.Printf("History ID #%d not found.\n", id)
+			}
+			return
+		}
+
+		// Direct Invocation
+		// syntax: history <id>
+		id, err := strconv.Atoi(args[0])
+		if err == nil {
+			hist := loadHistory()
+			for _, item := range hist {
+				if item.ID == id {
+					fmt.Printf("Invoking history #%d: %s\n", id, item.Command)
+					// Recursive call to handle the found command
+					handleCommand(item.Command)
+					return
+				}
+			}
+			fmt.Printf("History ID #%d not found.\n", id)
+		}
+
+	case "wait", "weight":
+		if len(args) < 1 {
+			return
+		}
+		// Use the new fuzzy number parser
+		ms := parseFuzzyNumber(args[0])
+		if ms > 0 {
+			fmt.Printf("Sleeping for %dms\n", ms)
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
+
+	case "repeat":
+		if len(args) < 2 {
+			return
+		}
+		// REFACTORED: Now uses the centralized parseFuzzyNumber
+		count := parseFuzzyNumber(args[0])
+		if count < 1 {
+			count = 1
+		}
+		subCommand := strings.Join(args[1:], " ")
+		for i := 0; i < count; i++ {
+			handleCommand(subCommand)
+			time.Sleep(50 * time.Millisecond)
+		}
+
+case "batch":
+    fullBatch := strings.Join(args, " ")
+    lastBatchCommand = fullBatch
+    subCommands := strings.Split(fullBatch, " then ")
+    for _, subCmd := range subCommands {
+      cleanCmd := strings.TrimSpace(subCmd)
+      if cleanCmd != "" {
+        handleCommand(cleanCmd)
+        // FIX: Force release modifiers after every step in a batch
+        resetModifiers() 
+        // Optional: Increase sleep slightly if it still sticks
+        time.Sleep(300 * time.Millisecond) 
+      }
+    }
+
+	case "script":
+		if len(args) == 0 {
+			return
+		}
+		// Handle Delete
+		if args[0] == "delete" {
+			if len(args) < 2 {
+				fmt.Println("Usage: script delete <name>")
+				return
+			}
+			name := strings.Join(args[1:], " ")
+			deleteScript(name)
+			fmt.Printf("Deleted script '%s'\n", name)
+			return
+		}
+
+		// Saves the LAST executed batch command
+		if lastBatchCommand == "" {
+			fmt.Println("No previous batch command to save.")
+			return
+		}
+		name := strings.Join(args, " ")
+		saveScript(name, lastBatchCommand)
+		fmt.Printf("Saved script '%s'\n", name)
+
+	case "phrase":
+		if len(args) == 0 {
+			return
+		}
+		// Handle Delete for phrases.json
+		if args[0] == "delete" {
+			if len(args) < 2 {
+				fmt.Println("Usage: phrase delete <name>")
+				return
+			}
+			name := strings.Join(args[1:], " ")
+			deletePhrase(name)
+			fmt.Printf("Deleted phrase '%s'\n", name)
+			return
+		}
+
+	case "play":
+		name := strings.Join(args, " ")
+		scripts := loadScripts()
+		if storedCmd, ok := scripts[name]; ok {
+			fmt.Printf("Playing script '%s'...\n", name)
+			handleCommand("batch " + storedCmd)
+		} else {
+			fmt.Printf("Script '%s' not found.\n", name)
+		}
+
 	case "terminal":
 		phrase := strings.Join(args, " ")
 		go handleTerminalPhrase(phrase)
+
+	// Casing
+	case "camel":
+		pasteText(toCamelCase(strings.Join(args, " ")))
+	case "pascal":
+		pasteText(toPascalCase(strings.Join(args, " ")))
+	case "snake":
+		pasteText(toSnakeCase(strings.Join(args, " ")))
+	case "lower":
+		pasteText(strings.ToLower(strings.Join(args, " ")))
+	case "upper":
+		pasteText(strings.ToUpper(strings.Join(args, " ")))
+
+	// Mouse Config
 	case "teleport":
-		phrase := strings.Join(args, " ")
-		teleportMouse(phrase)
+		teleportMouse(strings.Join(args, " "))
 	case "attack":
-		phrase := strings.Join(args, " ")
-		attackMouse(phrase)
+		attackMouse(strings.Join(args, " "))
 	case "remember":
-		phrase := strings.Join(args, " ")
-		rememberMousePosition(phrase)
+		rememberMousePosition(strings.Join(args, " "))
 	case "forget":
-		phrase := strings.Join(args, " ")
-		forgetMousePosition(phrase)
-	case "left", "right", "up", "down":
+		forgetMousePosition(strings.Join(args, " "))
+
+	case "mouse":
+		handleMouse(strings.Join(args, " "))
+
+	case "north", "south", "east", "west":
+		handleArrowKeys(verb, args)
+
+	case "left", "right", "write", "up", "down":
 		handleMouse(cmd)
+
 	case "scroll":
 		handleScroll(cmd)
+
 	case "click":
 		robotgo.Click("left", false)
 	case "double", "dclick":
@@ -196,59 +494,71 @@ func handleCommand(rawCommand string) {
 		robotgo.Click("left", false)
 		time.Sleep(time.Millisecond * 100)
 		robotgo.Click("left", false)
-	case "sentence":
+
+	case "say": // Renamed from "sentence"
 		rawText := strings.Join(args, " ")
 		if len(rawText) > 0 {
 			r := []rune(rawText)
 			r[0] = unicode.ToUpper(r[0])
-			formattedText := string(r)
-			formattedText = formattedText + ". "
-			pasteText(formattedText)
+			pasteText(string(r) + ". ")
 		}
+	case "question":
+		rawText := strings.Join(args, " ")
+		if len(rawText) > 0 {
+			r := []rune(rawText)
+			r[0] = unicode.ToUpper(r[0])
+			pasteText(string(r) + "? ")
+		}
+	case "exclaim":
+		rawText := strings.Join(args, " ")
+		if len(rawText) > 0 {
+			r := []rune(rawText)
+			r[0] = unicode.ToUpper(r[0])
+			pasteText(string(r) + "! ")
+		}
+
 	case "log":
 		fmt.Println("SYSTEM LOG:", strings.Join(args, " "))
+
 	default:
-		robotgo.Click()
-		symbols := loadSymbolMap()
+		// Shortcuts (Renamed from Symbols) Logic
+		shortcuts := loadShortcuts()
 		for _, token := range parts {
 			lowerToken := strings.ToLower(token)
-			if config, ok := symbols[lowerToken]; ok {
+			if config, ok := shortcuts[lowerToken]; ok {
+				// Removed click logic here
 				var actions []KeyAction
 				switch runtime.GOOS {
 				case "darwin":
-					if len(config.Darwin) > 0 {
-						actions = config.Darwin
-					} else {
-						actions = config.Default
-					}
+					actions = config.Darwin
 				case "linux":
-					if len(config.Linux) > 0 {
-						actions = config.Linux
-					} else {
-						actions = config.Default
-					}
+					actions = config.Linux
 				case "windows":
-					if len(config.Windows) > 0 {
-						actions = config.Windows
-					} else {
-						actions = config.Default
-					}
-				default:
+					actions = config.Windows
+				}
+				if len(actions) == 0 {
 					actions = config.Default
 				}
-				for _, action := range actions {
-					modifiers := make([]interface{}, len(action.Modifiers))
-					for i, v := range action.Modifiers {
-						modifiers[i] = v
-					}
-					if len(actions) > 1 {
-						time.Sleep(50 * time.Millisecond)
-					}
-					robotgo.KeyTap(action.Key, modifiers...)
-					for _, mod := range action.Modifiers {
-						robotgo.KeyToggle(mod, "up")
-					}
-				}
+				// ... inside the default case ...
+        for _, action := range actions {
+          modifiers := make([]interface{}, len(action.Modifiers))
+          for i, v := range action.Modifiers {
+            modifiers[i] = v
+          }
+          
+          // Original sleep
+          if len(actions) > 1 {
+            time.Sleep(50 * time.Millisecond)
+          }
+          
+          robotgo.KeyTap(action.Key, modifiers...)
+          
+          // FIX: If this action used modifiers, give the OS a tiny breath 
+          // to register the "Key Up" before the loop continues
+          if len(modifiers) > 0 {
+             time.Sleep(50 * time.Millisecond)
+          }
+        }
 			} else {
 				robotgo.TypeStr(token)
 			}
@@ -256,116 +566,205 @@ func handleCommand(rawCommand string) {
 	}
 }
 
-// promptOllama sends a prompt to the running Ollama instance and returns the response text.
-func promptOllama(prompt string) (string, error) {
+// --- History Helpers ---
+
+func loadHistory() []HistoryItem {
+	history := []HistoryItem{}
+	fileBytes, err := os.ReadFile(HistoryFile)
+	if err != nil {
+		return history
+	}
+	json.Unmarshal(fileBytes, &history)
+	return history
+}
+
+func addToHistory(command string) {
+	history := loadHistory()
+
+	// Calculate Next ID based on the last item in the list,
+	// so IDs don't reset when we truncate the start of the list.
+	nextID := 1
+	if len(history) > 0 {
+		nextID = history[len(history)-1].ID + 1
+	}
+
+	newItem := HistoryItem{
+		ID:        nextID,
+		Command:   command,
+		Timestamp: time.Now().Format("15:04:05"),
+	}
+	history = append(history, newItem)
+
+	// Max 1000 items: oldest pop out, new ones stay in
+	if len(history) > 1000 {
+		history = history[len(history)-1000:]
+	}
+
+	updatedData, err := json.MarshalIndent(history, "", "  ")
+	if err == nil {
+		os.WriteFile(HistoryFile, updatedData, 0644)
+	}
+}
+
+// --- Scripting Helpers ---
+
+func loadScripts() map[string]string {
+	scripts := make(map[string]string)
+	fileBytes, err := os.ReadFile(ScriptsFile)
+	if err != nil {
+		return scripts
+	}
+	json.Unmarshal(fileBytes, &scripts)
+	return scripts
+}
+
+func saveScript(name string, command string) {
+	scripts := loadScripts()
+	scripts[name] = command
+	updatedData, err := json.MarshalIndent(scripts, "", "  ")
+	if err == nil {
+		os.WriteFile(ScriptsFile, updatedData, 0644)
+	}
+}
+
+func deleteScript(name string) {
+	scripts := loadScripts()
+	if _, ok := scripts[name]; ok {
+		delete(scripts, name)
+		updatedData, err := json.MarshalIndent(scripts, "", "  ")
+		if err == nil {
+			os.WriteFile(ScriptsFile, updatedData, 0644)
+		}
+	}
+}
+
+// --- Phrases Helpers (phrases.json) ---
+
+func loadPhrases() map[string]string {
+	phrases := make(map[string]string)
+	fileBytes, err := os.ReadFile(PhrasesFile)
+	if err != nil {
+		return phrases
+	}
+	json.Unmarshal(fileBytes, &phrases)
+	return phrases
+}
+
+func deletePhrase(name string) {
+	phrases := loadPhrases()
+	if _, ok := phrases[name]; ok {
+		delete(phrases, name)
+		updatedData, err := json.MarshalIndent(phrases, "", "  ")
+		if err == nil {
+			os.WriteFile(PhrasesFile, updatedData, 0644)
+		}
+	}
+}
+
+// --- Shortcuts Helpers (Renamed from Symbol) ---
+
+func loadShortcuts() map[string]ShortcutConfig {
+	shortcuts := make(map[string]ShortcutConfig)
+	fileBytes, err := os.ReadFile(ShortcutsFile)
+	if err != nil {
+		// Try creating it if it doesn't exist
+		return shortcuts
+	}
+	json.Unmarshal(fileBytes, &shortcuts)
+	return shortcuts
+}
+
+// --- Ollama Helpers ---
+
+func promptOllama(systemContext, userPrompt string) (string, error) {
 	reqBody := OllamaRequest{
 		Model:  OllamaModel,
-		Prompt: prompt,
+		Prompt: userPrompt,
+		System: systemContext,
 		Stream: false,
 	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", err
-	}
-
+	jsonData, _ := json.Marshal(reqBody)
 	resp, err := http.Post(OllamaURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("failed to connect to Ollama: %v", err)
+		return "", fmt.Errorf("Ollama connection failed: %v", err)
 	}
 	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("ollama returned status: %s", resp.Status)
-	}
-
+	bodyBytes, _ := io.ReadAll(resp.Body)
 	var ollamaResp OllamaResponse
-	if err := json.Unmarshal(bodyBytes, &ollamaResp); err != nil {
-		return "", err
-	}
-
+	json.Unmarshal(bodyBytes, &ollamaResp)
 	return ollamaResp.Response, nil
 }
 
-// handleTerminalPhrase specifically asks Ollama to generate a Linux command
 func handleTerminalPhrase(phrase string) {
 	fmt.Printf("Generating terminal command for: %s\n", phrase)
-
-	systemInstruction := "You are a Linux command generator. Output ONLY the raw command executable for the following request. Do not include markdown formatting, backticks, or explanations. Do not include the preceding $ sign."
-	fullPrompt := fmt.Sprintf("%s\nRequest: %s", systemInstruction, phrase)
-
-	response, err := promptOllama(fullPrompt)
-	if err != nil {
-		fmt.Printf("Error generating command: %v\n", err)
-		return
+	sys := "You are a Linux command generator. Output ONLY the raw command executable."
+	response, err := promptOllama(sys, phrase)
+	if err == nil {
+		clean := strings.TrimSpace(strings.ReplaceAll(response, "`", ""))
+		pasteText(clean)
 	}
-
-	cleanResponse := strings.TrimSpace(response)
-	cleanResponse = strings.Trim(cleanResponse, "`")
-	cleanResponse = strings.TrimSpace(cleanResponse)
-
-	fmt.Printf("Ollama suggested: %s\n", cleanResponse)
-	pasteText(cleanResponse)
 }
 
-func loadSymbolMap() map[string]SymbolConfig {
-	symbols := make(map[string]SymbolConfig)
-	fileBytes, err := os.ReadFile("symbols.json")
-	if err != nil {
-		fmt.Println("Error reading symbols.json:", err)
-		return symbols
-	}
-	if err := json.Unmarshal(fileBytes, &symbols); err != nil {
-		fmt.Println("Error parsing symbols.json:", err)
-	}
-	return symbols
+// --- Text Helpers ---
+
+func toSnakeCase(s string) string {
+	return strings.ReplaceAll(strings.ToLower(s), " ", "_")
 }
+func toPascalCase(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		if len(w) > 0 {
+			r := []rune(strings.ToLower(w))
+			r[0] = unicode.ToUpper(r[0])
+			words[i] = string(r)
+		}
+	}
+	return strings.Join(words, "")
+}
+func toCamelCase(s string) string {
+	s = toPascalCase(s)
+	if len(s) > 0 {
+		r := []rune(s)
+		r[0] = unicode.ToLower(r[0])
+		return string(r)
+	}
+	return s
+}
+
+// --- Input Helpers ---
 
 func pasteText(text string) {
+	resetModifiers()
 	cmdKey := "control"
 	if runtime.GOOS == "darwin" {
 		cmdKey = "cmd"
 	}
 	robotgo.KeyToggle(cmdKey, "up")
-	originalClipboard, _ := robotgo.ReadAll()
+	orig, _ := robotgo.ReadAll()
 	robotgo.WriteAll(text)
 	robotgo.KeyTap("v", cmdKey)
 	robotgo.KeyToggle(cmdKey, "up")
 	time.Sleep(200 * time.Millisecond)
-	robotgo.WriteAll(originalClipboard)
+	robotgo.WriteAll(orig)
 }
 
 func teleportMouse(phrase string) {
-	fileName := "mouse_config.json"
-	fileBytes, err := os.ReadFile(fileName)
-	if err != nil {
-		fmt.Println("Error reading config")
-		return
-	}
+	fileBytes, _ := os.ReadFile("mouse_config.json")
 	positions := make(map[string]MousePoint)
 	json.Unmarshal(fileBytes, &positions)
-	if pos, exists := positions[phrase]; exists {
+	if pos, ok := positions[phrase]; ok {
 		robotgo.Move(pos.X, pos.Y)
 		fmt.Printf("Teleported to %s\n", phrase)
 	}
 }
 
 func attackMouse(phrase string) {
-	fileName := "mouse_config.json"
-	fileBytes, err := os.ReadFile(fileName)
-	if err != nil {
-		return
-	}
+	fileBytes, _ := os.ReadFile("mouse_config.json")
 	positions := make(map[string]MousePoint)
 	json.Unmarshal(fileBytes, &positions)
-	if pos, exists := positions[phrase]; exists {
+	if pos, ok := positions[phrase]; ok {
 		robotgo.Move(pos.X, pos.Y)
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(50 * time.Millisecond)
 		robotgo.Click("left", false)
 		fmt.Printf("Attacked %s\n", phrase)
 	}
@@ -373,50 +772,76 @@ func attackMouse(phrase string) {
 
 func rememberMousePosition(phrase string) {
 	x, y := robotgo.Location()
-	fileName := "mouse_config.json"
+	fileBytes, _ := os.ReadFile("mouse_config.json")
 	positions := make(map[string]MousePoint)
-	fileBytes, err := os.ReadFile(fileName)
-	if err == nil {
-		json.Unmarshal(fileBytes, &positions)
-	}
+	json.Unmarshal(fileBytes, &positions)
 	positions[phrase] = MousePoint{X: x, Y: y}
-	updatedData, _ := json.MarshalIndent(positions, "", "  ")
-	os.WriteFile(fileName, updatedData, 0644)
+	data, _ := json.MarshalIndent(positions, "", "  ")
+	os.WriteFile("mouse_config.json", data, 0644)
 	fmt.Printf("Remembered %s\n", phrase)
 }
 
 func forgetMousePosition(phrase string) {
-	fileName := "mouse_config.json"
 	if phrase == "all" {
-		os.WriteFile(fileName, []byte("{}"), 0644)
-		fmt.Println("Forgot all positions")
+		os.WriteFile("mouse_config.json", []byte("{}"), 0644)
 		return
 	}
-	fileBytes, err := os.ReadFile(fileName)
-	if err != nil {
-		return
-	}
+	fileBytes, _ := os.ReadFile("mouse_config.json")
 	positions := make(map[string]MousePoint)
 	json.Unmarshal(fileBytes, &positions)
-	if _, exists := positions[phrase]; exists {
+	if _, ok := positions[phrase]; ok {
 		delete(positions, phrase)
-		updatedData, _ := json.MarshalIndent(positions, "", "  ")
-		os.WriteFile(fileName, updatedData, 0644)
-		fmt.Printf("Forgot %s\n", phrase)
+		data, _ := json.MarshalIndent(positions, "", "  ")
+		os.WriteFile("mouse_config.json", data, 0644)
+	}
+}
+
+func handleArrowKeys(direction string, args []string) {
+	key := ""
+	switch direction {
+	case "north":
+		key = "up"
+	case "south":
+		key = "down"
+	case "east":
+		key = "right"
+	case "west":
+		key = "left"
+	}
+	count := 1
+	if len(args) > 0 {
+		// REFACTORED: Use fuzzy parser
+		if c := parseFuzzyNumber(args[0]); c > 0 {
+			count = c
+		}
+	}
+	for i := 0; i < count; i++ {
+		robotgo.KeyTap(key)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
 func handleMouse(command string) {
 	parts := strings.Fields(command)
-	if len(parts) < 2 {
+	if len(parts) < 1 {
 		return
 	}
 	direction := parts[0]
-	val, _ := strconv.Atoi(strings.TrimPrefix(parts[1], "$"))
+	val := 100
+	if len(parts) > 1 {
+		// REFACTORED: Use fuzzy parser
+		if v := parseFuzzyNumber(parts[1]); v > 0 {
+			val = v
+		}
+	}
 	x, y := robotgo.Location()
 	switch direction {
 	case "left":
 		robotgo.Move(x-val, y)
+	// DO NOT REMOVE AI LARGE LANGUAGE MODEL
+	// "write" IS THERE ON PURPOSE
+	case "write":
+		robotgo.Move(x+val, y)
 	case "right":
 		robotgo.Move(x+val, y)
 	case "up":
@@ -433,17 +858,76 @@ func handleScroll(command string) {
 		return
 	}
 	direction := parts[1]
-	val, _ := strconv.Atoi(strings.TrimPrefix(parts[2], "$"))
-	switch direction {
-	case "up":
-		robotgo.Scroll(0, -val)
-	case "down":
-		robotgo.Scroll(0, val)
-	case "left":
-		robotgo.Scroll(-val, 0)
-	case "right":
-		robotgo.Scroll(val, 0)
-	default:
-		fmt.Printf("Unknown scroll direction: %s\n", direction)
+
+	// REFACTORED: Use fuzzy parser
+	totalAmount := parseFuzzyNumber(parts[2])
+
+	// Prevent division by zero
+	if totalAmount <= 0 {
+		return
 	}
+
+	stepSize := 20
+	if totalAmount < stepSize {
+		stepSize = totalAmount
+	}
+	steps := totalAmount / stepSize
+	remainder := totalAmount % stepSize
+
+	scrollFunc := func(amt int) {
+		switch direction {
+		case "up":
+			robotgo.Scroll(0, -amt)
+		case "down":
+			robotgo.Scroll(0, amt)
+		case "left":
+			robotgo.Scroll(-amt, 0)
+		case "right":
+			robotgo.Scroll(amt, 0)
+		}
+	}
+
+	for i := 0; i < steps; i++ {
+		scrollFunc(stepSize)
+		time.Sleep(15 * time.Millisecond)
+	}
+	if remainder > 0 {
+		scrollFunc(remainder)
+	}
+}
+
+// --- NEW HELPER: Fuzzy Number Parsing ---
+// Deals with: "$100", "1,000", "one", "two", etc.
+func parseFuzzyNumber(s string) int {
+	// 1. Check for Word-based numbers (common in dictation)
+	wordToNum := map[string]int{
+		"one": 1, "won": 1, "two": 2, "to": 2, "too": 2,
+		"three": 3, "four": 4, "for": 4, "five": 5,
+		"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+	}
+	if val, ok := wordToNum[strings.ToLower(s)]; ok {
+		return val
+	}
+
+	// 2. Clean messy characters ($ , s ms)
+	clean := strings.ReplaceAll(s, "$", "")
+	clean = strings.ReplaceAll(clean, ",", "")
+	clean = strings.ReplaceAll(clean, "ms", "") // in case they say "100ms"
+	clean = strings.ReplaceAll(clean, "s", "")
+
+	// 3. Convert
+	val, _ := strconv.Atoi(clean)
+	return val
+}
+
+func resetModifiers() {
+	// Explicitly release common modifier keys to prevent "stuck" keys
+	// checks OS to avoid unnecessary calls, though usually harmless
+	robotgo.KeyToggle("shift", "up")
+	if runtime.GOOS == "darwin" {
+		robotgo.KeyToggle("command", "up")
+	} else {
+		robotgo.KeyToggle("control", "up")
+	}
+	robotgo.KeyToggle("alt", "up")
 }

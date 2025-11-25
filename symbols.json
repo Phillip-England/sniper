@@ -76,58 +76,72 @@
     "darwin": [{ "key": "enter", "modifiers": ["cmd"] }]
   },
   "save": {
+    "click": true,
     "default": [{ "key": "s", "modifiers": ["control"] }],
     "darwin": [{ "key": "s", "modifiers": ["cmd"] }]
   },
   "undo": {
+    "click": true,
     "default": [{ "key": "z", "modifiers": ["control"] }],
     "darwin": [{ "key": "z", "modifiers": ["cmd"] }]
   },
   "redo": {
+    "click": true,
     "default": [{ "key": "z", "modifiers": ["control", "shift"] }],
     "darwin": [{ "key": "z", "modifiers": ["cmd", "shift"] }]
   },
   "copy": {
+    "click": true,
     "default": [{ "key": "c", "modifiers": ["control"] }],
     "darwin": [{ "key": "c", "modifiers": ["cmd"] }]
   },
   "paste": {
+    "click": true,
     "default": [{ "key": "v", "modifiers": ["control"] }],
     "darwin": [{ "key": "v", "modifiers": ["cmd"] }]
   },
   "cut": {
+    "click": true,
     "default": [{ "key": "x", "modifiers": ["control"] }],
     "darwin": [{ "key": "x", "modifiers": ["cmd"] }]
   },
   "select": {
+    "click": true,
     "default": [{ "key": "a", "modifiers": ["control"] }],
     "darwin": [{ "key": "a", "modifiers": ["cmd"] }]
   },
   "find": {
+    "click": true,
     "default": [{ "key": "f", "modifiers": ["control"] }],
     "darwin": [{ "key": "f", "modifiers": ["cmd"] }]
   },
   "print": {
+    "click": true,
     "default": [{ "key": "p", "modifiers": ["control"] }],
     "darwin": [{ "key": "p", "modifiers": ["cmd"] }]
   },
   "new": {
+    "click": true,
     "default": [{ "key": "t", "modifiers": ["control"] }],
     "darwin": [{ "key": "t", "modifiers": ["cmd"] }]
   },
   "close": {
+    "click": true,
     "default": [{ "key": "w", "modifiers": ["control"] }],
     "darwin": [{ "key": "w", "modifiers": ["cmd"] }]
   },
   "refresh": {
+    "click": true,
     "default": [{ "key": "r", "modifiers": ["control"] }],
     "darwin": [{ "key": "r", "modifiers": ["cmd"] }]
   },
   "lock": {
+    "click": true,
     "default": [{ "key": "l", "modifiers": ["control"] }],
     "darwin": [{ "key": "l", "modifiers": ["cmd"] }]
   },
   "grab": {
+    "click": true,
     "default": [
       { "key": "a", "modifiers": ["control"] },
       { "key": "c", "modifiers": ["control"] }
@@ -138,6 +152,7 @@
     ]
   },
   "kill": {
+    "click": true,
     "default": [
       { "key": "a", "modifiers": ["control"] },
       { "key": "x", "modifiers": ["control"] }
@@ -148,6 +163,7 @@
     ]
   },
   "replace": {
+    "click": true,
     "default": [
       { "key": "a", "modifiers": ["control"] },
       { "key": "v", "modifiers": ["control"] }

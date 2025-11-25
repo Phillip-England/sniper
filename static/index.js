@@ -3,13 +3,13 @@ class AudioManager {
   sounds;
   constructor() {
     this.sounds = {
-      "sniper-on": new Audio("/static/sniper-on.wav"),
-      "sniper-off": new Audio("/static/sniper-off.wav"),
-      "sniper-exit": new Audio("/static/sniper-exit.wav"),
-      "sniper-clear": new Audio("/static/sniper-clear.wav"),
-      "sniper-copy": new Audio("/static/sniper-copy.wav"),
-      "sniper-search": new Audio("/static/sniper-search.wav"),
-      "sniper-visit": new Audio("/static/sniper-visit.wav"),
+      "sniper-on": new Audio("/static/on.wav"),
+      "sniper-off": new Audio("/static/off.wav"),
+      "sniper-exit": new Audio("/static/exit.wav"),
+      "sniper-clear": new Audio("/static/clear.wav"),
+      "sniper-copy": new Audio("/static/copy.wav"),
+      "sniper-search": new Audio("/static/search.wav"),
+      "sniper-visit": new Audio("/static/visit.wav"),
       click: new Audio("/static/click.wav")
     };
     this.preloadSounds();
@@ -124,16 +124,6 @@ class SniperCore {
   recognition = null;
   lastCommand = "";
   openedWindows = [];
-  lastLogTime = 0;
-  LOG_THROTTLE_RATE = 500;
-  webShortcuts = {
-    ai: "https://gemini.google.com",
-    "chat gpt": "https://chatgpt.com",
-    youtube: "https://youtube.com",
-    github: "https://github.com",
-    local: "http://localhost:3000",
-    mail: "https://gmail.com"
-  };
   state = {
     isRecording: false,
     isLogging: true,
@@ -187,14 +177,10 @@ class SniperCore {
         const alternative = result[0];
         if (!alternative)
           continue;
+        console.log(`[RAW SPEECH DETECTED]: ${alternative.transcript} (Final: ${result.isFinal})`);
         if (result.isFinal) {
           finalChunk += alternative.transcript;
         } else {
-          const now = Date.now();
-          if (now - this.lastLogTime > this.LOG_THROTTLE_RATE) {
-            console.log(`[Interim]: ${alternative.transcript}`);
-            this.lastLogTime = now;
-          }
           interimChunk += alternative.transcript;
         }
       }
@@ -242,50 +228,24 @@ class SniperCore {
     if (command) {
       this.lastCommand = command;
     }
-    if (command.startsWith("open")) {
-      const target = command.replace("open", "").trim();
-      if (this.webShortcuts[target]) {
-        this.audio.play("sniper-visit");
-        const url = this.webShortcuts[target];
-        const newWin = window.open(url, "_blank");
-        if (newWin)
-          this.openedWindows.push(newWin);
-        return { capturedByCommand: true };
-      }
-    }
-    if (command.startsWith("visit")) {
-      this.audio.play("sniper-visit");
-      const rawUrl = command.replace("visit", "").trim();
-      this.openDirectUrl(rawUrl);
-      return { capturedByCommand: true };
-    }
-    if (command.startsWith("search")) {
-      this.audio.play("sniper-search");
-      const query = command.replace("search", "").trim();
-      this.openSearch(query);
-      return { capturedByCommand: true };
-    }
     switch (command.replace(/[.,]/g, "")) {
+      case "help history":
+        this.audio.play("click");
+        window.open("http://localhost:3000/history", "_blank");
+        return { capturedByCommand: true };
+      case "help scripts":
+        this.audio.play("click");
+        window.open("http://localhost:3000/scripts", "_blank");
+        return { capturedByCommand: true };
+      case "help shortcuts":
+        this.audio.play("click");
+        window.open("http://localhost:3000/shortcuts", "_blank");
+        return { capturedByCommand: true };
       case "exit":
         this.audio.play("sniper-exit");
         this.ui.clearText();
         this.state.shouldContinue = false;
         this.stop();
-        return { capturedByCommand: true };
-      case "help mouse":
-        this.audio.play("sniper-visit");
-        const mouseWin = window.open("/mouse", "_blank");
-        if (mouseWin)
-          this.openedWindows.push(mouseWin);
-        return { capturedByCommand: true };
-      case "help signs":
-        this.audio.play("sniper-visit");
-        const charWin = window.open("/signs", "_blank");
-        if (charWin)
-          this.openedWindows.push(charWin);
-        return { capturedByCommand: true };
-      case "reveal":
-        this.sendToBackend("reveal");
         return { capturedByCommand: true };
       case "off":
         this.audio.play("sniper-off");
@@ -297,10 +257,6 @@ class SniperCore {
         this.audio.play("sniper-on");
         this.state.isLogging = true;
         this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-        return { capturedByCommand: true };
-      case "simplify":
-        this.audio.play("sniper-clear");
-        this.closeOpenedWindows();
         return { capturedByCommand: true };
       default:
         if (this.state.isLogging) {
@@ -319,26 +275,6 @@ class SniperCore {
     });
     this.openedWindows = [];
     console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
-  }
-  openSearch(query) {
-    if (!query)
-      return;
-    const normalized = query.replace(/ dot /g, ".").replace(/ period /g, ".");
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(normalized)}`;
-    const newWin = window.open(searchUrl, "_blank");
-    if (newWin)
-      this.openedWindows.push(newWin);
-  }
-  openDirectUrl(transcript) {
-    if (!transcript)
-      return;
-    let url = transcript.toLowerCase().replace(/ dot /g, ".").replace(/ period /g, ".").replace(/ slash /g, "/").replace(/\s+/g, "");
-    if (!url.startsWith("http")) {
-      url = "https://" + url;
-    }
-    const newWin = window.open(url, "_blank");
-    if (newWin)
-      this.openedWindows.push(newWin);
   }
   bindEvents() {
     const btn = this.ui.getRecordButton();
