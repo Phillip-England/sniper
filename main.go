@@ -150,18 +150,22 @@ func runServerSide() error {
 }
 
 func handleCommand(rawCommand string) {
-	fmt.Printf("Raw Input: %s\n", rawCommand)
+	// --- PREPROCESSOR ---
+	// Convert spelled out numbers (one, two) to digits (1, 2)
+	finalCommand := preprocessCommand(rawCommand)
+
+	fmt.Printf("Raw Input: %s | Processed: %s\n", rawCommand, finalCommand)
 
 	// Log to History first
-	addToHistory(rawCommand)
+	addToHistory(finalCommand)
 
 	// --- BATCHING LOGIC ---
 	// Always check for the " then " delimiter to handle command chaining.
 	// We use lower case checking to be case-insensitive for the delimiter.
-	lowerInput := strings.ToLower(rawCommand)
+	lowerInput := strings.ToLower(finalCommand)
 	if strings.Contains(lowerInput, " then ") {
 		// Update lastBatchCommand so 'script save' works with implicit batches
-		lastBatchCommand = rawCommand
+		lastBatchCommand = finalCommand
 
 		parts := strings.Split(lowerInput, " then ")
 		for _, part := range parts {
@@ -179,7 +183,7 @@ func handleCommand(rawCommand string) {
 	}
 	// ----------------------
 
-	cmd := strings.ToLower(rawCommand)
+	cmd := strings.ToLower(finalCommand)
 	parts := strings.Fields(cmd)
 	if len(parts) == 0 {
 		return
@@ -349,7 +353,7 @@ func handleCommand(rawCommand string) {
 			time.Sleep(50 * time.Millisecond)
 		}
 
-	case "batch":
+	case "go":
 		fullBatch := strings.Join(args, " ")
 		lastBatchCommand = fullBatch
 		subCommands := strings.Split(fullBatch, " then ")
@@ -358,7 +362,7 @@ func handleCommand(rawCommand string) {
 			if cleanCmd != "" {
 				handleCommand(cleanCmd)
 				resetModifiers()
-				time.Sleep(300 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 			}
 		}
 
@@ -404,7 +408,7 @@ func handleCommand(rawCommand string) {
 		scripts := loadScripts()
 		if storedCmd, ok := scripts[name]; ok {
 			fmt.Printf("Playing script '%s'...\n", name)
-			handleCommand("batch " + storedCmd)
+			handleCommand("go " + storedCmd)
 		} else {
 			fmt.Printf("Script '%s' not found.\n", name)
 		}
@@ -656,7 +660,7 @@ func handleCommand(rawCommand string) {
 
 	default:
 		// Default now does nothing (or logs unknown command) to prevent accidental typing
-		fmt.Printf("Unknown Command Ignored: %s\n", rawCommand)
+		fmt.Printf("Unknown Command Ignored: %s\n", finalCommand)
 	}
 }
 
@@ -995,6 +999,36 @@ func parseFuzzyNumber(s string) int {
 	return val
 }
 
+// preprocessCommand iterates through every word in the command and converts
+// spelled-out numbers into digit literals (e.g., "twenty" -> "20").
+func preprocessCommand(input string) string {
+	wordToNum := map[string]string{
+		"zero": "0", "one": "1", "won": "1", "two": "2", "to": "2", "too": "2",
+		"three": "3", "four": "4", "for": "4", "five": "5",
+		"six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+		"eleven": "11", "twelve": "12", "thirteen": "13", "fourteen": "14",
+		"fifteen": "15", "sixteen": "16", "seventeen": "17", "eighteen": "18", "nineteen": "19",
+		"twenty": "20", "thirty": "30", "forty": "40", "fifty": "50",
+		"sixty": "60", "seventy": "70", "eighty": "80", "ninety": "90",
+		"hundred": "100",
+	}
+
+	words := strings.Fields(input)
+	for i, word := range words {
+		// Clean punctuation for matching (e.g. "five.")
+		cleanWord := strings.ToLower(strings.TrimRight(word, ",.!?"))
+		if val, ok := wordToNum[cleanWord]; ok {
+			// Restore punctuation if it existed
+			punctuation := ""
+			if len(word) > len(cleanWord) {
+				punctuation = word[len(cleanWord):]
+			}
+			words[i] = val + punctuation
+		}
+	}
+	return strings.Join(words, " ")
+}
+
 func resetModifiers() {
 	robotgo.KeyToggle("shift", "up")
 	if runtime.GOOS == "darwin" {
@@ -1003,7 +1037,7 @@ func resetModifiers() {
 		robotgo.KeyToggle("control", "up")
 	}
 	robotgo.KeyToggle("alt", "up")
-	time.Sleep(time.Millisecond * 20)
+	time.Sleep(time.Millisecond * 10)
 }
 
 // getModifierKey returns the robotgo key identifier for a given spoken verb.
