@@ -1,5 +1,12 @@
+history.json
+phrases.json
+mouse_config.json
+scripts.json
+alphabet.json
+
 # dependencies (bun install)
 node_modules
+
 
 # output
 out
