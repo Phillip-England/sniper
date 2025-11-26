@@ -150,8 +150,6 @@ class UIManager {
 
   public updateText(final: string, interim: string, isLogging: boolean) {
     if (isLogging) {
-        // CHANGED: We now overwrite the text instead of appending (+Refactor)
-        // This ensures only the most recent command is shown.
         if (final) {
             this.transcriptEl.innerText = final; 
         }
@@ -202,13 +200,27 @@ class SniperCore {
   private audio: AudioManager;
   private ui: UIManager;
   private recognition: SpeechRecognition | null = null;
-  
+   
   // Track the very last command executed for the 'repeat' functionality
   private lastCommand: string = '';
 
-  // Array to track all windows opened by this session (search, visit, and open)
-  private openedWindows: Window[] = [];
+  // THROTTLE & PARSING STATE
+  private lastSentCommand: string = '';
+  private lastSentTime: number = 0;
+  private processedWordCount: number = 0; // Tracks how many words of the current phrase we have already processed
+  private readonly THROTTLE_MS = 200;
 
+  // Define keywords here that are allowed to be sent during interim results
+  private readonly ACCEPTED_INTERIM_KEYWORDS = [
+    'scroll', 
+    'up', 
+    'down', 
+    'right',
+    'left',
+    'move',
+    'stop',
+    'go' 
+  ];
 
   private state = {
     isRecording: false,
@@ -273,9 +285,6 @@ class SniperCore {
         const alternative = result[0];
         if (!alternative) continue;
 
-        // ========================================================
-        // >>> CONSOLE LOG ADDED HERE FOR IMMEDIATE FEEDBACK <<<
-        // ========================================================
         console.log(`[RAW SPEECH DETECTED]: ${alternative.transcript} (Final: ${result.isFinal})`);
 
         if (result.isFinal) {
@@ -285,17 +294,59 @@ class SniperCore {
         }
       }
 
+      // --- LOGIC START: SMART PARSING ---
+      if (this.state.isLogging) {
+          
+          // 1. Split current interim phrase into words
+          const allWords = interimChunk.trim().split(/\s+/).filter(w => w.length > 0);
+          
+          // 2. Identify ONLY the new words we haven't processed yet in this phrase
+          //    This solves the "left" -> "left up" problem by ignoring the first "left"
+          const newWords = allWords.slice(this.processedWordCount);
+
+          // 3. Process new words
+          if (newWords.length > 0) {
+              const now = Date.now();
+
+              newWords.forEach(word => {
+                  const cleanWord = word.toLowerCase();
+
+                  // Check if this word is in our accepted list
+                  if (this.ACCEPTED_INTERIM_KEYWORDS.some(k => cleanWord.includes(k))) {
+                      
+                      // --- SMART THROTTLE ---
+                      // If it's the SAME command as last time, check timer.
+                      // If it's a DIFFERENT command, send immediately (ignore timer).
+                      const isSameCommand = (cleanWord === this.lastSentCommand);
+                      const isTooFast = (now - this.lastSentTime < this.THROTTLE_MS);
+
+                      if (isSameCommand && isTooFast) {
+                          console.log(`[Sniper] Throttled rapid-fire duplicate: ${cleanWord}`);
+                      } else {
+                          // Send it!
+                          this.sendToBackend(cleanWord);
+                          this.lastSentCommand = cleanWord;
+                          this.lastSentTime = now;
+                      }
+                  }
+              });
+
+              // Update our counter so we don't process these specific words again for this phrase
+              this.processedWordCount = allWords.length;
+          }
+      }
+      // --- LOGIC END ---
+
+
       if (finalChunk) {
-        // 1. Immediately update UI with the new command (replaces old command)
+        // Reset the word count because a new phrase will start now
+        this.processedWordCount = 0;
+
+        // 1. Immediately update UI with the new command
         this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
         
-        // 2. Process the command
-        const processed = this.handleCommands(finalChunk);
-        
-        // 3. Audio feedback if not a specific command
-        if (!processed.capturedByCommand && this.state.isLogging) {
-           this.audio.play('click');
-        }
+        // 2. Process static commands (On/Off/Exit)
+        this.handleCommands(finalChunk);
       } else {
         this.ui.updateText('', interimChunk, this.state.isLogging);
       }
@@ -310,6 +361,9 @@ class SniperCore {
   }
 
   private async sendToBackend(command: string) {
+    // SHIFTED LOGIC: Audio triggers here when backend request is made
+    this.audio.play('click');
+    
     try {
       console.log(`[Sniper] Sending to backend: ${command}`);
       await fetch('http://localhost:8000/api/data', { 
@@ -324,7 +378,7 @@ class SniperCore {
     }
   }
 
-private handleCommands(text: string): { capturedByCommand: boolean } {
+  private handleCommands(text: string): { capturedByCommand: boolean } {
     const command = text.toLowerCase().trim().replace(/[?!]/g, ''); 
       
     // --- SPECIAL REPEAT LOGIC ---
@@ -343,29 +397,13 @@ private handleCommands(text: string): { capturedByCommand: boolean } {
       
     // --- STATIC COMMANDS ---
     switch (command.replace(/[.,]/g, '')) { 
-      // ... existing cases ...
-
-      case 'help history':
-        this.audio.play('click');
-        window.open('http://localhost:3000/history', '_blank');
-        return { capturedByCommand: true };
-
-      case 'help scripts':
-        this.audio.play('click');
-        window.open('http://localhost:3000/scripts', '_blank');
-        return { capturedByCommand: true };
-
-      case 'help shortcuts':
-        this.audio.play('click');
-        window.open('http://localhost:3000/shortcuts', '_blank');
-        return { capturedByCommand: true };
       case 'exit':
         this.audio.play('sniper-exit');
         this.ui.clearText(); 
         this.state.shouldContinue = false;
         this.stop();
         return { capturedByCommand: true };
-       
+        
       case 'off':
         this.audio.play('sniper-off');
         this.ui.clearText(); 
@@ -379,28 +417,12 @@ private handleCommands(text: string): { capturedByCommand: boolean } {
         this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
         return { capturedByCommand: true };
 
-    default:
-      if (this.state.isLogging) {
-        this.sendToBackend(command);
-      }
-      return { capturedByCommand: false };
+      default:
+        // No longer processing non-static commands here. 
+        // Logic relies on Interim results matching keywords.
+        return { capturedByCommand: false };
     }
   }
-
-  private closeOpenedWindows() {
-    let closedCount = 0;
-    this.openedWindows.forEach(win => {
-      // Check if window object exists and isn't already closed manually
-      if (win && !win.closed) {
-        win.close();
-        closedCount++;
-      }
-    });
-    // Reset the array after closing
-    this.openedWindows = [];
-    console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
-  }
-
 
   private bindEvents() {
     const btn = this.ui.getRecordButton();

@@ -123,7 +123,20 @@ class SniperCore {
   ui;
   recognition = null;
   lastCommand = "";
-  openedWindows = [];
+  lastSentCommand = "";
+  lastSentTime = 0;
+  processedWordCount = 0;
+  THROTTLE_MS = 200;
+  ACCEPTED_INTERIM_KEYWORDS = [
+    "scroll",
+    "up",
+    "down",
+    "right",
+    "left",
+    "move",
+    "stop",
+    "go"
+  ];
   state = {
     isRecording: false,
     isLogging: true,
@@ -184,12 +197,32 @@ class SniperCore {
           interimChunk += alternative.transcript;
         }
       }
-      if (finalChunk) {
-        this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
-        const processed = this.handleCommands(finalChunk);
-        if (!processed.capturedByCommand && this.state.isLogging) {
-          this.audio.play("click");
+      if (this.state.isLogging) {
+        const allWords = interimChunk.trim().split(/\s+/).filter((w) => w.length > 0);
+        const newWords = allWords.slice(this.processedWordCount);
+        if (newWords.length > 0) {
+          const now = Date.now();
+          newWords.forEach((word) => {
+            const cleanWord = word.toLowerCase();
+            if (this.ACCEPTED_INTERIM_KEYWORDS.some((k) => cleanWord.includes(k))) {
+              const isSameCommand = cleanWord === this.lastSentCommand;
+              const isTooFast = now - this.lastSentTime < this.THROTTLE_MS;
+              if (isSameCommand && isTooFast) {
+                console.log(`[Sniper] Throttled rapid-fire duplicate: ${cleanWord}`);
+              } else {
+                this.sendToBackend(cleanWord);
+                this.lastSentCommand = cleanWord;
+                this.lastSentTime = now;
+              }
+            }
+          });
+          this.processedWordCount = allWords.length;
         }
+      }
+      if (finalChunk) {
+        this.processedWordCount = 0;
+        this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
+        this.handleCommands(finalChunk);
       } else {
         this.ui.updateText("", interimChunk, this.state.isLogging);
       }
@@ -202,6 +235,7 @@ class SniperCore {
     };
   }
   async sendToBackend(command) {
+    this.audio.play("click");
     try {
       console.log(`[Sniper] Sending to backend: ${command}`);
       await fetch("http://localhost:8000/api/data", {
@@ -229,18 +263,6 @@ class SniperCore {
       this.lastCommand = command;
     }
     switch (command.replace(/[.,]/g, "")) {
-      case "help history":
-        this.audio.play("click");
-        window.open("http://localhost:3000/history", "_blank");
-        return { capturedByCommand: true };
-      case "help scripts":
-        this.audio.play("click");
-        window.open("http://localhost:3000/scripts", "_blank");
-        return { capturedByCommand: true };
-      case "help shortcuts":
-        this.audio.play("click");
-        window.open("http://localhost:3000/shortcuts", "_blank");
-        return { capturedByCommand: true };
       case "exit":
         this.audio.play("sniper-exit");
         this.ui.clearText();
@@ -259,22 +281,8 @@ class SniperCore {
         this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
         return { capturedByCommand: true };
       default:
-        if (this.state.isLogging) {
-          this.sendToBackend(command);
-        }
         return { capturedByCommand: false };
     }
-  }
-  closeOpenedWindows() {
-    let closedCount = 0;
-    this.openedWindows.forEach((win) => {
-      if (win && !win.closed) {
-        win.close();
-        closedCount++;
-      }
-    });
-    this.openedWindows = [];
-    console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
   }
   bindEvents() {
     const btn = this.ui.getRecordButton();
