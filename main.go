@@ -155,6 +155,30 @@ func handleCommand(rawCommand string) {
 	// Log to History first
 	addToHistory(rawCommand)
 
+	// --- BATCHING LOGIC ---
+	// Always check for the " then " delimiter to handle command chaining.
+	// We use lower case checking to be case-insensitive for the delimiter.
+	lowerInput := strings.ToLower(rawCommand)
+	if strings.Contains(lowerInput, " then ") {
+		// Update lastBatchCommand so 'script save' works with implicit batches
+		lastBatchCommand = rawCommand
+
+		parts := strings.Split(lowerInput, " then ")
+		for _, part := range parts {
+			cleanCmd := strings.TrimSpace(part)
+			// Ignore empty commands or commands that are just whitespace
+			if cleanCmd != "" {
+				handleCommand(cleanCmd)
+				// Reset modifiers and wait between batch steps
+				resetModifiers()
+				time.Sleep(300 * time.Millisecond)
+			}
+		}
+		// Return immediately so we don't process the full string as a single command
+		return
+	}
+	// ----------------------
+
 	cmd := strings.ToLower(rawCommand)
 	parts := strings.Fields(cmd)
 	if len(parts) == 0 {
@@ -529,12 +553,49 @@ func handleCommand(rawCommand string) {
 		resetModifiers()
 		time.Sleep(20 * time.Millisecond)
 
-	default:
-		// --- DEFAULT BRANCH (Standard Alphabet Typing) ---
+	// --- DIRECT ALPHABET/KEY MAPPING ---
+	case "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet", "kilo", "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango", "uniform", "victor", "whiskey", "xray", "yankee", "zulu",
+		"square", "cube", "curve", "loop", "arch", "rim", "less", "great", "plus", "equal", "hyphen", "score", "star", "cent", "hat", "bang", "at", "hash", "cash", "amp", "pipe", "window", "slash", "colon", "semicolon", "quote", "tick", "comma", "dot", "query", "tilde", "grave",
+		"next", "gap", "enter", "return", "tab", "escape", "back", "scratch":
+
+		alphabet := loadAlphabet()
+		if config, ok := alphabet[verb]; ok {
+			var actions []KeyAction
+			switch runtime.GOOS {
+			case "darwin":
+				actions = config.Darwin
+			case "linux":
+				actions = config.Linux
+			case "windows":
+				actions = config.Windows
+			}
+			if len(actions) == 0 {
+				actions = config.Default
+			}
+
+			if len(actions) > 0 {
+				// Loop through all actions (though usually just one for alphabet keys)
+				for _, action := range actions {
+					modifiers := make([]interface{}, len(action.Modifiers))
+					for i, v := range action.Modifiers {
+						modifiers[i] = v
+					}
+					robotgo.KeyTap(action.Key, modifiers...)
+					if len(modifiers) > 0 {
+						resetModifiers()
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+		}
+
+	case "spell":
+		// --- SPELL BRANCH (Iterates over args) ---
 		alphabet := loadAlphabet()
 		capitalizeNext := false
 
-		for _, token := range parts {
+		// We iterate over 'args' so we don't type the word "spell"
+		for _, token := range args {
 			// Check if we need to set the capitalize flag for the next word
 			if strings.ToLower(token) == "capital" {
 				capitalizeNext = true
@@ -592,6 +653,10 @@ func handleCommand(rawCommand string) {
 			// Space out words slightly
 			time.Sleep(20 * time.Millisecond)
 		}
+
+	default:
+		// Default now does nothing (or logs unknown command) to prevent accidental typing
+		fmt.Printf("Unknown Command Ignored: %s\n", rawCommand)
 	}
 }
 
@@ -938,6 +1003,7 @@ func resetModifiers() {
 		robotgo.KeyToggle("control", "up")
 	}
 	robotgo.KeyToggle("alt", "up")
+	time.Sleep(time.Millisecond * 20)
 }
 
 // getModifierKey returns the robotgo key identifier for a given spoken verb.
