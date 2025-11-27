@@ -298,9 +298,11 @@ class SniperCore {
         
         const isCommand = baseCommands.includes(processed);
         const isNumber = /^\d+$/.test(processed);
-        const isLetter = /^[a-z]$/.test(processed);
-
-        if (isCommand || isNumber || isLetter) {
+        
+        // REMOVED: const isLetter = /^[a-z]$/.test(processed);
+        // Only allow explicit commands (including phonetics) and numbers.
+        
+        if (isCommand || isNumber) {
             
             // 4. Deduplication
             if (processed !== this.previousProcessedToken) {
@@ -331,8 +333,9 @@ class SniperCore {
   }
 
   private async sendToBackend(command: string) {
-    if (command.includes(' ') || command.trim().length === 0) {
-        console.warn(`[Sniper] Blocked multi-word/empty: "${command}"`);
+    // SECURITY: Block multi-word, empty strings, AND single letters
+    if (command.includes(' ') || command.trim().length === 0 || /^[a-z]$/.test(command)) {
+        console.warn(`[Sniper] Blocked invalid/letter: "${command}"`);
         return;
     }
 
@@ -360,6 +363,7 @@ class SniperCore {
     }
 
     // --- REMEMBER LAST COMMAND (Skip logic keywords) ---
+    // Note: Single letters will now be blocked before reaching here or blocked by sendToBackend
     if (!/^\d+$/.test(command) && command !== 'again' && command !== 'on' && command !== 'off') {
         this.lastActionCommand = command;
     }

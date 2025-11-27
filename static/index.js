@@ -254,8 +254,7 @@ class SniperCore {
         ];
         const isCommand = baseCommands.includes(processed);
         const isNumber = /^\d+$/.test(processed);
-        const isLetter = /^[a-z]$/.test(processed);
-        if (isCommand || isNumber || isLetter) {
+        if (isCommand || isNumber) {
           if (processed !== this.previousProcessedToken) {
             const now = Date.now();
             if (now - this.lastExecutionTime > this.THROTTLE_DELAY) {
@@ -279,8 +278,8 @@ class SniperCore {
     };
   }
   async sendToBackend(command) {
-    if (command.includes(" ") || command.trim().length === 0) {
-      console.warn(`[Sniper] Blocked multi-word/empty: "${command}"`);
+    if (command.includes(" ") || command.trim().length === 0 || /^[a-z]$/.test(command)) {
+      console.warn(`[Sniper] Blocked invalid/letter: "${command}"`);
       return;
     }
     this.audio.play("click");
