@@ -189,7 +189,7 @@ class SniperCore {
 
   private state = {
     isRecording: false,
-    isLogging: true,
+    isLogging: true, // Defaults to ON
     shouldContinue: false
   };
 
@@ -289,7 +289,7 @@ class SniperCore {
         const baseCommands = [
             // Controls
             'north', 'south', 'east', 'west', 'option', 'alt', 'command', 'control', 
-            'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again', 'shift',
+            'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again',
             // Phonetic Alphabet
             'alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 
             'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec', 'romeo', 
@@ -298,7 +298,6 @@ class SniperCore {
         
         const isCommand = baseCommands.includes(processed);
         const isNumber = /^\d+$/.test(processed);
-        // We keep isLetter in case something slips through, but phonetic words are preferred
         const isLetter = /^[a-z]$/.test(processed);
 
         if (isCommand || isNumber || isLetter) {
@@ -352,6 +351,7 @@ class SniperCore {
   private handleCommands(text: string): void {
     const command = text.toLowerCase().trim();
 
+    // --- RECURSIVE 'AGAIN' LOGIC ---
     if (command === 'again') {
         if (this.lastActionCommand) {
             this.handleCommands(this.lastActionCommand);
@@ -359,13 +359,41 @@ class SniperCore {
         }
     }
 
-    if (!/^\d+$/.test(command) && command !== 'again') {
+    // --- REMEMBER LAST COMMAND (Skip logic keywords) ---
+    if (!/^\d+$/.test(command) && command !== 'again' && command !== 'on' && command !== 'off') {
         this.lastActionCommand = command;
     }
+
+    // --- STATIC CLIENT-SIDE COMMANDS ---
+    switch (command) {
+        case 'exit':
+            this.audio.play('sniper-exit');
+            this.ui.clearText(); 
+            this.state.shouldContinue = false;
+            this.stop();
+            return; // Stop here, don't send to backend
+
+        case 'off':
+            this.audio.play('sniper-off');
+            this.ui.clearText(); 
+            this.state.isLogging = false; // Disable backend sending
+            this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
+            return;
+
+        case 'on':
+            this.audio.play('sniper-on');
+            this.state.isLogging = true; // Enable backend sending
+            this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
+            return;
+    }
       
-    // Pass phonetic words directly to backend, they will be handled there
-    console.log(command)
-    this.sendToBackend(command);
+    // --- SERVER-SIDE COMMANDS ---
+    // Only send if logging is ENABLED
+    if (this.state.isLogging) {
+        this.sendToBackend(command);
+    } else {
+        console.log(`[Sniper] Ignored "${command}" (System is OFF)`);
+    }
   }
 
   private bindEvents() {

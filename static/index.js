@@ -225,7 +225,6 @@ class SniperCore {
           "off",
           "exit",
           "again",
-          "shift",
           "alpha",
           "bravo",
           "charlie",
@@ -303,11 +302,33 @@ class SniperCore {
         return;
       }
     }
-    if (!/^\d+$/.test(command) && command !== "again") {
+    if (!/^\d+$/.test(command) && command !== "again" && command !== "on" && command !== "off") {
       this.lastActionCommand = command;
     }
-    console.log(command);
-    this.sendToBackend(command);
+    switch (command) {
+      case "exit":
+        this.audio.play("sniper-exit");
+        this.ui.clearText();
+        this.state.shouldContinue = false;
+        this.stop();
+        return;
+      case "off":
+        this.audio.play("sniper-off");
+        this.ui.clearText();
+        this.state.isLogging = false;
+        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
+        return;
+      case "on":
+        this.audio.play("sniper-on");
+        this.state.isLogging = true;
+        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
+        return;
+    }
+    if (this.state.isLogging) {
+      this.sendToBackend(command);
+    } else {
+      console.log(`[Sniper] Ignored "${command}" (System is OFF)`);
+    }
   }
   bindEvents() {
     const btn = this.ui.getRecordButton();
