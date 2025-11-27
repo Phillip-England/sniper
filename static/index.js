@@ -104,7 +104,7 @@ class SniperCore {
   previousProcessedToken = "";
   lastResultIndex = -1;
   lastExecutionTime = 0;
-  THROTTLE_DELAY = 400;
+  THROTTLE_DELAY = 200;
   state = {
     isRecording: false,
     isLogging: true,
@@ -225,6 +225,7 @@ class SniperCore {
           "off",
           "exit",
           "again",
+          "shift",
           "alpha",
           "bravo",
           "charlie",
@@ -265,7 +266,7 @@ class SniperCore {
               this.ui.showCommand(processed);
               this.handleCommands(processed);
             } else {
-              console.log(`[Sniper] Throttled: ${processed} (Limit 400ms)`);
+              console.log(`[Sniper] Throttled: ${processed} (Limit 200ms)`);
             }
           }
         }
@@ -305,6 +306,7 @@ class SniperCore {
     if (!/^\d+$/.test(command) && command !== "again") {
       this.lastActionCommand = command;
     }
+    console.log(command);
     this.sendToBackend(command);
   }
   bindEvents() {

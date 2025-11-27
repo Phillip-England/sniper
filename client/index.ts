@@ -185,7 +185,7 @@ class SniperCore {
   private previousProcessedToken: string = '';
   private lastResultIndex: number = -1; 
   private lastExecutionTime: number = 0;
-  private readonly THROTTLE_DELAY = 400; // 400ms constraint
+  private readonly THROTTLE_DELAY = 200; // 200ms constraint
 
   private state = {
     isRecording: false,
@@ -289,7 +289,7 @@ class SniperCore {
         const baseCommands = [
             // Controls
             'north', 'south', 'east', 'west', 'option', 'alt', 'command', 'control', 
-            'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again',
+            'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again', 'shift',
             // Phonetic Alphabet
             'alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 
             'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec', 'romeo', 
@@ -312,12 +312,11 @@ class SniperCore {
                     
                     this.previousProcessedToken = processed;
                     this.lastExecutionTime = now;
-
                     console.log(`[Sniper] Executing: ${processed}`);
                     this.ui.showCommand(processed);
                     this.handleCommands(processed);
                 } else {
-                    console.log(`[Sniper] Throttled: ${processed} (Limit 400ms)`);
+                    console.log(`[Sniper] Throttled: ${processed} (Limit 200ms)`);
                 }
             }
         }
@@ -365,6 +364,7 @@ class SniperCore {
     }
       
     // Pass phonetic words directly to backend, they will be handled there
+    console.log(command)
     this.sendToBackend(command);
   }
 
