@@ -36,8 +36,8 @@ class UIManager {
   outputContainer;
   placeholder;
   statusText;
-  copyBtn;
   greenDot;
+  commandTimeout = null;
   defaultClasses = ["bg-red-600", "hover:scale-105", "hover:bg-red-500"];
   recordingClasses = ["bg-red-700", "animate-pulse", "ring-4", "ring-red-900"];
   constructor() {
@@ -47,9 +47,9 @@ class UIManager {
     this.outputContainer = document.getElementById("output-container");
     this.placeholder = document.getElementById("placeholder");
     this.statusText = document.getElementById("status-text");
-    this.copyBtn = this.outputContainer.querySelector("button");
     this.greenDot = document.getElementById("green-dot");
-    this.setupCopyButton();
+    this.transcriptEl.innerText = "";
+    this.interimEl.innerText = "";
   }
   getRecordButton() {
     return this.btn;
@@ -67,54 +67,32 @@ class UIManager {
       this.btn.classList.add(...this.recordingClasses);
       this.statusText.classList.remove("opacity-0");
       this.outputContainer.classList.remove("opacity-0", "translate-y-10");
-      this.placeholder.textContent = "Listening...";
+      this.placeholder.textContent = "Listening for commands...";
+      this.placeholder.classList.remove("hidden");
     } else {
       this.btn.classList.remove(...this.recordingClasses);
       this.btn.classList.add(...this.defaultClasses);
       this.statusText.classList.add("opacity-0");
       this.placeholder.textContent = "Tap button to speak...";
-      this.togglePlaceholder();
+      this.placeholder.classList.remove("hidden");
+      this.transcriptEl.innerText = "";
     }
   }
-  updateText(final, interim, isLogging) {
-    if (isLogging) {
-      if (final) {
-        this.transcriptEl.innerText = final;
-      }
-      this.interimEl.innerText = interim;
-    } else {
-      this.interimEl.innerText = "";
+  showCommand(command) {
+    this.placeholder.classList.add("hidden");
+    this.transcriptEl.innerText = `[ ${command.toUpperCase()} ]`;
+    if (this.commandTimeout) {
+      window.clearTimeout(this.commandTimeout);
     }
-    this.togglePlaceholder();
+    this.commandTimeout = window.setTimeout(() => {
+      this.transcriptEl.innerText = "";
+      this.placeholder.classList.remove("hidden");
+    }, 2000);
   }
   clearText() {
     this.transcriptEl.innerText = "";
     this.interimEl.innerText = "";
-    this.togglePlaceholder();
-  }
-  getText() {
-    return this.transcriptEl.innerText;
-  }
-  togglePlaceholder() {
-    if (this.transcriptEl.innerText || this.interimEl.innerText) {
-      this.placeholder.classList.add("hidden");
-    } else {
-      this.placeholder.classList.remove("hidden");
-    }
-  }
-  setupCopyButton() {
-    if (!this.copyBtn)
-      return;
-    this.copyBtn.onclick = null;
-    this.copyBtn.addEventListener("click", () => {
-      const text = this.transcriptEl.innerText;
-      if (text) {
-        navigator.clipboard.writeText(text);
-        const originalText = this.copyBtn.innerText;
-        this.copyBtn.innerText = "[ COPIED! ]";
-        setTimeout(() => this.copyBtn.innerText = originalText, 2000);
-      }
-    });
+    this.placeholder.classList.remove("hidden");
   }
 }
 
@@ -124,6 +102,9 @@ class SniperCore {
   recognition = null;
   lastActionCommand = "";
   previousProcessedToken = "";
+  lastResultIndex = -1;
+  lastExecutionTime = 0;
+  THROTTLE_DELAY = 400;
   state = {
     isRecording: false,
     isLogging: true,
@@ -209,9 +190,10 @@ class SniperCore {
       this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
     };
     this.recognition.onresult = (event) => {
-      let finalChunk = "";
-      let interimChunk = "";
-      let commandHandled = false;
+      if (event.resultIndex !== this.lastResultIndex) {
+        this.lastResultIndex = event.resultIndex;
+        this.previousProcessedToken = "";
+      }
       for (let i = event.resultIndex;i < event.results.length; ++i) {
         const result = event.results[i];
         if (!result || !result.length)
@@ -219,36 +201,29 @@ class SniperCore {
         const alternative = result[0];
         if (!alternative)
           continue;
-        const transcript = alternative.transcript;
-        if (result.isFinal) {
-          finalChunk += transcript;
-        } else {
-          const words = transcript.trim().split(/\s+/);
-          const lastWord = words[words.length - 1];
-          if (lastWord) {
-            const processed = this.preprocessNumber(lastWord);
-            const baseCommands = ["write", "click", "left", "right", "up", "down", "on", "off", "exit", "again"];
-            const isCommand = baseCommands.includes(processed);
-            const isNumber = /^\d+$/.test(processed);
-            if (isCommand || isNumber) {
-              if (processed !== this.previousProcessedToken) {
-                this.previousProcessedToken = processed;
-                const outcome = this.handleCommands(processed);
-                if (outcome.capturedByCommand) {
-                  commandHandled = true;
-                }
-              }
+        const transcript = alternative.transcript.trim();
+        if (transcript.includes(" ")) {
+          continue;
+        }
+        const processed = this.preprocessNumber(transcript);
+        const baseCommands = ["north", "south", "east", "west", "option", "alt", "command", "control", "write", "click", "left", "right", "up", "down", "on", "off", "exit", "again"];
+        const isCommand = baseCommands.includes(processed);
+        const isNumber = /^\d+$/.test(processed);
+        const isLetter = /^[a-z]$/.test(processed);
+        if (isCommand || isNumber || isLetter) {
+          if (processed !== this.previousProcessedToken) {
+            const now = Date.now();
+            if (now - this.lastExecutionTime > this.THROTTLE_DELAY) {
+              this.previousProcessedToken = processed;
+              this.lastExecutionTime = now;
+              console.log(`[Sniper] Executing: ${processed}`);
+              this.ui.showCommand(processed);
+              this.handleCommands(processed);
+            } else {
+              console.log(`[Sniper] Throttled: ${processed} (Limit 400ms)`);
             }
           }
-          interimChunk += transcript;
         }
-      }
-      if (finalChunk) {
-        this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
-      } else if (commandHandled) {
-        this.ui.updateText("", "", this.state.isLogging);
-      } else {
-        this.ui.updateText("", interimChunk, this.state.isLogging);
       }
     };
     this.recognition.onerror = (event) => {
@@ -259,30 +234,30 @@ class SniperCore {
     };
   }
   async sendToBackend(command) {
+    if (command.includes(" ") || command.trim().length === 0) {
+      console.warn(`[Sniper] Blocked multi-word/empty: "${command}"`);
+      return;
+    }
+    this.audio.play("click");
     try {
-      console.log(`[Sniper] Sending to backend: ${command}`);
-      await fetch("http://localhost:8000/api/data", {
+      fetch("http://localhost:8000/api/data", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command })
-      });
+      }).catch((e) => console.error("Fetch error", e));
     } catch (err) {
-      console.warn("[Sniper] Backend connection failed. Is localhost:8000 running?");
+      console.warn("[Sniper] Backend connection failed.");
     }
   }
   handleCommands(text) {
-    const command = text.toLowerCase();
+    const command = text.toLowerCase().trim();
     if (command === "again") {
       if (this.lastActionCommand) {
-        console.log(`Repeating command: ${this.lastActionCommand}`);
-        return this.handleCommands(this.lastActionCommand);
-      } else {
-        return { capturedByCommand: true };
+        this.handleCommands(this.lastActionCommand);
+        return;
       }
     }
-    if (!/^\d+$/.test(command)) {
+    if (!/^\d+$/.test(command) && command !== "again") {
       this.lastActionCommand = command;
     }
     switch (command) {
@@ -292,31 +267,38 @@ class SniperCore {
       case "up":
       case "down":
       case "click":
+      case "control":
+      case "option":
+      case "alt":
+      case "command":
+      case "north":
+      case "south":
+      case "east":
+      case "west":
         this.sendToBackend(command);
-        return { capturedByCommand: true };
+        break;
       case "exit":
         this.audio.play("sniper-exit");
         this.ui.clearText();
         this.state.shouldContinue = false;
         this.stop();
-        return { capturedByCommand: true };
+        break;
       case "off":
         this.audio.play("sniper-off");
         this.ui.clearText();
         this.state.isLogging = false;
         this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-        return { capturedByCommand: true };
+        break;
       case "on":
         this.audio.play("sniper-on");
         this.state.isLogging = true;
         this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-        return { capturedByCommand: true };
+        break;
       default:
-        if (/^\d+$/.test(command)) {
+        if (/^\d+$/.test(command) || /^[a-z]$/.test(command)) {
           this.sendToBackend(command);
-          return { capturedByCommand: true };
         }
-        return { capturedByCommand: false };
+        break;
     }
   }
   bindEvents() {
