@@ -206,7 +206,52 @@ class SniperCore {
           continue;
         }
         const processed = this.preprocessNumber(transcript);
-        const baseCommands = ["history", "shift", "north", "south", "east", "west", "option", "alt", "command", "control", "write", "click", "left", "right", "up", "down", "on", "off", "exit", "again"];
+        const baseCommands = [
+          "north",
+          "south",
+          "east",
+          "west",
+          "option",
+          "alt",
+          "command",
+          "control",
+          "write",
+          "click",
+          "left",
+          "right",
+          "up",
+          "down",
+          "on",
+          "off",
+          "exit",
+          "again",
+          "alpha",
+          "bravo",
+          "charlie",
+          "delta",
+          "echo",
+          "foxtrot",
+          "golf",
+          "hotel",
+          "india",
+          "juliet",
+          "kilo",
+          "lima",
+          "mike",
+          "november",
+          "oscar",
+          "papa",
+          "quebec",
+          "romeo",
+          "sierra",
+          "tango",
+          "uniform",
+          "victor",
+          "whiskey",
+          "xray",
+          "yankee",
+          "zulu"
+        ];
         const isCommand = baseCommands.includes(processed);
         const isNumber = /^\d+$/.test(processed);
         const isLetter = /^[a-z]$/.test(processed);
@@ -260,47 +305,7 @@ class SniperCore {
     if (!/^\d+$/.test(command) && command !== "again") {
       this.lastActionCommand = command;
     }
-    switch (command) {
-      case "left":
-      case "write":
-      case "right":
-      case "up":
-      case "down":
-      case "click":
-      case "control":
-      case "option":
-      case "alt":
-      case "command":
-      case "north":
-      case "south":
-      case "east":
-      case "west":
-      case "shift":
-        this.sendToBackend(command);
-        break;
-      case "exit":
-        this.audio.play("sniper-exit");
-        this.ui.clearText();
-        this.state.shouldContinue = false;
-        this.stop();
-        break;
-      case "off":
-        this.audio.play("sniper-off");
-        this.ui.clearText();
-        this.state.isLogging = false;
-        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-        break;
-      case "on":
-        this.audio.play("sniper-on");
-        this.state.isLogging = true;
-        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-        break;
-      default:
-        if (/^\d+$/.test(command) || /^[a-z]$/.test(command)) {
-          this.sendToBackend(command);
-        }
-        break;
-    }
+    this.sendToBackend(command);
   }
   bindEvents() {
     const btn = this.ui.getRecordButton();
