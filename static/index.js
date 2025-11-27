@@ -122,31 +122,59 @@ class SniperCore {
   audio;
   ui;
   recognition = null;
-  lastCommand = "";
-  lastSentCommand = "";
-  lastSentTime = 0;
-  processedWordCount = 0;
-  THROTTLE_MS = 200;
-  ACCEPTED_INTERIM_KEYWORDS = [
-    "scroll",
-    "up",
-    "down",
-    "right",
-    "left",
-    "move",
-    "stop",
-    "go"
-  ];
+  lastActionCommand = "";
+  previousProcessedToken = "";
   state = {
     isRecording: false,
     isLogging: true,
     shouldContinue: false
+  };
+  numberMap = {
+    zero: "0",
+    one: "1",
+    won: "1",
+    two: "2",
+    to: "2",
+    too: "2",
+    three: "3",
+    tree: "3",
+    four: "4",
+    for: "4",
+    five: "5",
+    six: "6",
+    seven: "7",
+    eight: "8",
+    ate: "8",
+    nine: "9",
+    ten: "10",
+    eleven: "11",
+    twelve: "12",
+    thirteen: "13",
+    fourteen: "14",
+    fifteen: "15",
+    sixteen: "16",
+    seventeen: "17",
+    eighteen: "18",
+    nineteen: "19",
+    twenty: "20",
+    thirty: "30",
+    forty: "40",
+    fifty: "50",
+    sixty: "60",
+    seventy: "70",
+    eighty: "80",
+    ninety: "90",
+    hundred: "100"
   };
   constructor(audio, ui) {
     this.audio = audio;
     this.ui = ui;
     this.initializeSpeechEngine();
     this.bindEvents();
+  }
+  preprocessNumber(input) {
+    const cleanWord = input.toLowerCase().trim().replace(/[?!.,]/g, "");
+    return this.numberMap[cleanWord] || cleanWord;
   }
   initializeSpeechEngine() {
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -183,6 +211,7 @@ class SniperCore {
     this.recognition.onresult = (event) => {
       let finalChunk = "";
       let interimChunk = "";
+      let commandHandled = false;
       for (let i = event.resultIndex;i < event.results.length; ++i) {
         const result = event.results[i];
         if (!result || !result.length)
@@ -190,39 +219,34 @@ class SniperCore {
         const alternative = result[0];
         if (!alternative)
           continue;
-        console.log(`[RAW SPEECH DETECTED]: ${alternative.transcript} (Final: ${result.isFinal})`);
+        const transcript = alternative.transcript;
         if (result.isFinal) {
-          finalChunk += alternative.transcript;
+          finalChunk += transcript;
         } else {
-          interimChunk += alternative.transcript;
-        }
-      }
-      if (this.state.isLogging) {
-        const allWords = interimChunk.trim().split(/\s+/).filter((w) => w.length > 0);
-        const newWords = allWords.slice(this.processedWordCount);
-        if (newWords.length > 0) {
-          const now = Date.now();
-          newWords.forEach((word) => {
-            const cleanWord = word.toLowerCase();
-            if (this.ACCEPTED_INTERIM_KEYWORDS.some((k) => cleanWord.includes(k))) {
-              const isSameCommand = cleanWord === this.lastSentCommand;
-              const isTooFast = now - this.lastSentTime < this.THROTTLE_MS;
-              if (isSameCommand && isTooFast) {
-                console.log(`[Sniper] Throttled rapid-fire duplicate: ${cleanWord}`);
-              } else {
-                this.sendToBackend(cleanWord);
-                this.lastSentCommand = cleanWord;
-                this.lastSentTime = now;
+          const words = transcript.trim().split(/\s+/);
+          const lastWord = words[words.length - 1];
+          if (lastWord) {
+            const processed = this.preprocessNumber(lastWord);
+            const baseCommands = ["write", "click", "left", "right", "up", "down", "on", "off", "exit", "again"];
+            const isCommand = baseCommands.includes(processed);
+            const isNumber = /^\d+$/.test(processed);
+            if (isCommand || isNumber) {
+              if (processed !== this.previousProcessedToken) {
+                this.previousProcessedToken = processed;
+                const outcome = this.handleCommands(processed);
+                if (outcome.capturedByCommand) {
+                  commandHandled = true;
+                }
               }
             }
-          });
-          this.processedWordCount = allWords.length;
+          }
+          interimChunk += transcript;
         }
       }
       if (finalChunk) {
-        this.processedWordCount = 0;
         this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
-        this.handleCommands(finalChunk);
+      } else if (commandHandled) {
+        this.ui.updateText("", "", this.state.isLogging);
       } else {
         this.ui.updateText("", interimChunk, this.state.isLogging);
       }
@@ -235,7 +259,6 @@ class SniperCore {
     };
   }
   async sendToBackend(command) {
-    this.audio.play("click");
     try {
       console.log(`[Sniper] Sending to backend: ${command}`);
       await fetch("http://localhost:8000/api/data", {
@@ -250,19 +273,27 @@ class SniperCore {
     }
   }
   handleCommands(text) {
-    const command = text.toLowerCase().trim().replace(/[?!]/g, "");
+    const command = text.toLowerCase();
     if (command === "again") {
-      if (this.lastCommand) {
-        console.log(`Repeating command: ${this.lastCommand}`);
-        return this.handleCommands(this.lastCommand);
+      if (this.lastActionCommand) {
+        console.log(`Repeating command: ${this.lastActionCommand}`);
+        return this.handleCommands(this.lastActionCommand);
       } else {
         return { capturedByCommand: true };
       }
     }
-    if (command) {
-      this.lastCommand = command;
+    if (!/^\d+$/.test(command)) {
+      this.lastActionCommand = command;
     }
-    switch (command.replace(/[.,]/g, "")) {
+    switch (command) {
+      case "left":
+      case "write":
+      case "right":
+      case "up":
+      case "down":
+      case "click":
+        this.sendToBackend(command);
+        return { capturedByCommand: true };
       case "exit":
         this.audio.play("sniper-exit");
         this.ui.clearText();
@@ -281,6 +312,10 @@ class SniperCore {
         this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
         return { capturedByCommand: true };
       default:
+        if (/^\d+$/.test(command)) {
+          this.sendToBackend(command);
+          return { capturedByCommand: true };
+        }
         return { capturedByCommand: false };
     }
   }

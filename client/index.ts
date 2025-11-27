@@ -200,27 +200,12 @@ class SniperCore {
   private audio: AudioManager;
   private ui: UIManager;
   private recognition: SpeechRecognition | null = null;
-   
+  
   // Track the very last command executed for the 'repeat' functionality
-  private lastCommand: string = '';
-
-  // THROTTLE & PARSING STATE
-  private lastSentCommand: string = '';
-  private lastSentTime: number = 0;
-  private processedWordCount: number = 0; // Tracks how many words of the current phrase we have already processed
-  private readonly THROTTLE_MS = 200;
-
-  // Define keywords here that are allowed to be sent during interim results
-  private readonly ACCEPTED_INTERIM_KEYWORDS = [
-    'scroll', 
-    'up', 
-    'down', 
-    'right',
-    'left',
-    'move',
-    'stop',
-    'go' 
-  ];
+  private lastActionCommand: string = '';
+  
+  // Track the immediate last processed token to prevent duplicates (Debouncing)
+  private previousProcessedToken: string = '';
 
   private state = {
     isRecording: false,
@@ -228,11 +213,40 @@ class SniperCore {
     shouldContinue: false
   };
 
+  // Maps spelled-out numbers to their digit string equivalents
+  private numberMap: Record<string, string> = {
+    "zero": "0", "one": "1", "won": "1", 
+    "two": "2", "to": "2", "too": "2",
+    "three": "3", "tree": "3",
+    "four": "4", "for": "4", 
+    "five": "5", 
+    "six": "6", 
+    "seven": "7", 
+    "eight": "8", "ate": "8",
+    "nine": "9", 
+    "ten": "10",
+    "eleven": "11", "twelve": "12", "thirteen": "13", 
+    "fourteen": "14", "fifteen": "15", "sixteen": "16", 
+    "seventeen": "17", "eighteen": "18", "nineteen": "19",
+    "twenty": "20", "thirty": "30", "forty": "40", 
+    "fifty": "50", "sixty": "60", "seventy": "70", 
+    "eighty": "80", "ninety": "90", "hundred": "100"
+  };
+
   constructor(audio: AudioManager, ui: UIManager) {
     this.audio = audio;
     this.ui = ui;
     this.initializeSpeechEngine();
     this.bindEvents();
+  }
+
+  /**
+   * Cleans input word and converts spelled numbers to digits.
+   * e.g., "Two" -> "2", "For" -> "4", "Left." -> "left"
+   */
+  private preprocessNumber(input: string): string {
+    const cleanWord = input.toLowerCase().trim().replace(/[?!.,]/g, '');
+    return this.numberMap[cleanWord] || cleanWord;
   }
 
   private initializeSpeechEngine() {
@@ -277,76 +291,61 @@ class SniperCore {
     this.recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalChunk = '';
       let interimChunk = '';
+      let commandHandled = false;
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
-          
         if (!result || !result.length) continue;
         const alternative = result[0];
         if (!alternative) continue;
-
-        console.log(`[RAW SPEECH DETECTED]: ${alternative.transcript} (Final: ${result.isFinal})`);
-
+        const transcript = alternative.transcript;
+        
         if (result.isFinal) {
-          finalChunk += alternative.transcript;
+          // Full sentence handling can go here later
+          finalChunk += transcript;
         } else {
-          interimChunk += alternative.transcript;
+          const words = transcript.trim().split(/\s+/);
+          const lastWord = words[words.length - 1];
+          
+          if (lastWord) {
+            // 1. PREPROCESS: Convert to number or clean string
+            const processed = this.preprocessNumber(lastWord);
+
+            // 2. DEFINE VALID VOCABULARY
+            const baseCommands = ['write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again'];
+            
+            // Check if it is a known command OR a number (regex checks for digits)
+            const isCommand = baseCommands.includes(processed);
+            const isNumber = /^\d+$/.test(processed);
+
+            if (isCommand || isNumber) {
+                // 3. DEDUPLICATION CHECK
+                // If the current processed word matches the immediate previous one, ignore it.
+                // Exception: 'again' is allowed to be repeated if desired, 
+                // but usually we prevent the *same word capture*. 
+                // We'll enforce strict deduplication on input tokens here.
+                if (processed !== this.previousProcessedToken) {
+                    
+                    // Update the tracker so we don't fire this again immediately
+                    this.previousProcessedToken = processed;
+
+                    // Execute logic
+                    const outcome = this.handleCommands(processed);
+                    if (outcome.capturedByCommand) {
+                        commandHandled = true;
+                    }
+                }
+            }
+          }
+          interimChunk += transcript;
         }
       }
 
-      // --- LOGIC START: SMART PARSING ---
-      if (this.state.isLogging) {
-          
-          // 1. Split current interim phrase into words
-          const allWords = interimChunk.trim().split(/\s+/).filter(w => w.length > 0);
-          
-          // 2. Identify ONLY the new words we haven't processed yet in this phrase
-          //    This solves the "left" -> "left up" problem by ignoring the first "left"
-          const newWords = allWords.slice(this.processedWordCount);
-
-          // 3. Process new words
-          if (newWords.length > 0) {
-              const now = Date.now();
-
-              newWords.forEach(word => {
-                  const cleanWord = word.toLowerCase();
-
-                  // Check if this word is in our accepted list
-                  if (this.ACCEPTED_INTERIM_KEYWORDS.some(k => cleanWord.includes(k))) {
-                      
-                      // --- SMART THROTTLE ---
-                      // If it's the SAME command as last time, check timer.
-                      // If it's a DIFFERENT command, send immediately (ignore timer).
-                      const isSameCommand = (cleanWord === this.lastSentCommand);
-                      const isTooFast = (now - this.lastSentTime < this.THROTTLE_MS);
-
-                      if (isSameCommand && isTooFast) {
-                          console.log(`[Sniper] Throttled rapid-fire duplicate: ${cleanWord}`);
-                      } else {
-                          // Send it!
-                          this.sendToBackend(cleanWord);
-                          this.lastSentCommand = cleanWord;
-                          this.lastSentTime = now;
-                      }
-                  }
-              });
-
-              // Update our counter so we don't process these specific words again for this phrase
-              this.processedWordCount = allWords.length;
-          }
-      }
-      // --- LOGIC END ---
-
-
       if (finalChunk) {
-        // Reset the word count because a new phrase will start now
-        this.processedWordCount = 0;
-
-        // 1. Immediately update UI with the new command
         this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
-        
-        // 2. Process static commands (On/Off/Exit)
-        this.handleCommands(finalChunk);
+      } else if (commandHandled) {
+        // If a command was handled, clear interim so it doesn't stick around
+        this.ui.updateText('', '', this.state.isLogging);
       } else {
         this.ui.updateText('', interimChunk, this.state.isLogging);
       }
@@ -361,9 +360,6 @@ class SniperCore {
   }
 
   private async sendToBackend(command: string) {
-    // SHIFTED LOGIC: Audio triggers here when backend request is made
-    this.audio.play('click');
-    
     try {
       console.log(`[Sniper] Sending to backend: ${command}`);
       await fetch('http://localhost:8000/api/data', { 
@@ -379,31 +375,44 @@ class SniperCore {
   }
 
   private handleCommands(text: string): { capturedByCommand: boolean } {
-    const command = text.toLowerCase().trim().replace(/[?!]/g, ''); 
+    const command = text.toLowerCase(); 
       
     // --- SPECIAL REPEAT LOGIC ---
     if (command === 'again') {
-        if (this.lastCommand) {
-            console.log(`Repeating command: ${this.lastCommand}`);
-            return this.handleCommands(this.lastCommand);
+        // "again" repeats the LAST ACTION (not the last number)
+        if (this.lastActionCommand) {
+            console.log(`Repeating command: ${this.lastActionCommand}`);
+            // We recursively call handleCommands with the stored action
+            return this.handleCommands(this.lastActionCommand);
         } else {
             return { capturedByCommand: true };
         }
     }
 
-    if (command) {
-        this.lastCommand = command;
+    // Only update "lastActionCommand" if it is NOT a number
+    // This ensures "Left -> 2 -> Again" repeats "Left", not "2"
+    if (!/^\d+$/.test(command)) {
+        this.lastActionCommand = command;
     }
       
     // --- STATIC COMMANDS ---
-    switch (command.replace(/[.,]/g, '')) { 
+    switch (command) { 
+      case 'left':
+      case 'write':
+      case 'right':
+      case 'up':
+      case 'down':
+      case 'click':
+        this.sendToBackend(command);
+        return { capturedByCommand: true };
+
       case 'exit':
         this.audio.play('sniper-exit');
         this.ui.clearText(); 
         this.state.shouldContinue = false;
         this.stop();
         return { capturedByCommand: true };
-        
+       
       case 'off':
         this.audio.play('sniper-off');
         this.ui.clearText(); 
@@ -418,8 +427,11 @@ class SniperCore {
         return { capturedByCommand: true };
 
       default:
-        // No longer processing non-static commands here. 
-        // Logic relies on Interim results matching keywords.
+        // If it's a number (digits), send to backend
+        if (/^\d+$/.test(command)) {
+             this.sendToBackend(command);
+             return { capturedByCommand: true };
+        }
         return { capturedByCommand: false };
     }
   }
