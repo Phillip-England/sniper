@@ -282,14 +282,14 @@ class SniperCore {
         const transcript = alternative.transcript.trim();
         
         if (transcript.includes(' ')) {
-            // console.log(`[Sniper] Ignored phrase: "${transcript}"`);
-            continue;
+          // console.log(`[Sniper] Ignored phrase: "${transcript}"`);
+          continue;
         }
 
         // 3. Process the Single Word
         const processed = this.preprocessNumber(transcript);
         
-        const baseCommands = ['north', 'south', 'east', 'west', 'option', 'alt', 'command', 'control', 'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again'];
+        const baseCommands = ['history', 'shift', 'north', 'south', 'east', 'west', 'option', 'alt', 'command', 'control', 'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again'];
         
         const isCommand = baseCommands.includes(processed);
         const isNumber = /^\d+$/.test(processed);
@@ -373,6 +373,7 @@ class SniperCore {
       case 'south':
       case 'east':
       case 'west':
+      case "shift":
         this.sendToBackend(command);
         break;
 

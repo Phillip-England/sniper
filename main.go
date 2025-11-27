@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Phillip-England/vii"
@@ -14,24 +17,47 @@ import (
 )
 
 // --- CONFIGURATION ---
-
 const (
-	ClientPort = "3000"
-	ServerPort = "8000"
-	// ThrottleMs is the gatekeeper window. If the same command comes in
-	// within this window, it is ignored to prevent echo/rapid-fire.
-	ThrottleMs = 400
+	ClientPort                = "3000"
+	ServerPort                = "8000"
+	ThrottleMs                = 400
+	MOUSE_MOVE_DISTANCE       = 100
+	MOUSE_REPETITION_DISTANCE = 50
+	HistoryFile               = "history.json"
+	SequenceTimeout           = 3000
 )
 
-// Global state to remember the last valid action verb (e.g., "left", "west")
-var lastVerb string
+// Global state
+var (
+	mu                sync.Mutex
+	lastVerb          string
+	activeModifiers   []string
+	lastProcessedCmd  string
+	lastProcessedTime time.Time
+	// Sequencing state
+	lastNumericInput string
+	lastTotalCount   int
+)
 
-// Global state to store keys currently held down (e.g. "control", "alt")
-var activeModifiers []string
+// HistoryItem represents a single command record with an ID
+type HistoryItem struct {
+	ID      string `json:"id"`
+	Command string `json:"command"`
+}
 
-// Global state for throttling/gatekeeping
-var lastProcessedCmd string
-var lastProcessedTime time.Time
+// 100 distinct words not in the standard command set
+var idWords = []string{
+	"acorn", "bacon", "cactus", "dairy", "eagle", "fable", "giant", "haven", "igloo", "joker",
+	"koala", "lemon", "melon", "neon", "orbit", "pizza", "radar", "solar", "tiger", "ultra",
+	"vivid", "wagon", "xenon", "yogurt", "zebra", "amber", "bravo", "cedar", "delta", "epoch",
+	"falcon", "gamma", "hazel", "inlet", "jump", "karma", "lunar", "mango", "noble", "ocean",
+	"piano", "quartz", "radio", "sute", "tempo", "urban", "virus", "whale", "xerox", "youth",
+	"zesty", "angel", "bingo", "candy", "diner", "elfin", "flame", "ghost", "happy", "irony",
+	"jelly", "kitty", "laser", "magic", "ninja", "olive", "panda", "quest", "robin", "sugar",
+	"token", "unity", "viper", "water", "xylophone", "yacht", "zinc", "atlas", "blaze", "comet",
+	"dream", "ember", "frost", "glory", "hero", "image", "jewel", "knife", "logic", "metal",
+	"nurse", "onion", "pilot", "quiet", "river", "snake", "table", "uncle", "video", "wolf",
+}
 
 func main() {
 	errChan := make(chan error, 2)
@@ -58,11 +84,9 @@ func runClientSide() error {
 	if err := app.Templates("./templates", nil); err != nil {
 		return err
 	}
-
 	app.At("GET /", func(w http.ResponseWriter, r *http.Request) {
 		vii.ExecuteTemplate(w, r, "index.html", nil)
 	})
-
 	return app.Serve(ClientPort)
 }
 
@@ -80,11 +104,7 @@ func runServerSide() error {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
-
-		// Pass to gatekeeper/handler
 		executed := handleCommand(req.Command)
-
-		// Return status so client knows whether to play the "Click" sound
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]bool{
 			"executed": executed,
@@ -93,9 +113,9 @@ func runServerSide() error {
 	return app.Serve(ServerPort)
 }
 
-// handleCommand returns true if the command was executed, false if throttled/ignored
 func handleCommand(rawCommand string) bool {
-	// --- PREPROCESSOR ---
+	mu.Lock()
+	defer mu.Unlock()
 	finalCommand := preprocessCommand(rawCommand)
 	cmd := strings.ToLower(finalCommand)
 	parts := strings.Fields(cmd)
@@ -104,132 +124,309 @@ func handleCommand(rawCommand string) bool {
 	}
 	verb := parts[0]
 
-	// --- GATEKEEPER (THROTTLE LOGIC) ---
-	// If the EXACT same command (verb) is received too quickly, ignore it.
-	// We check if it is NOT numeric because we want numbers to pass through rapidly if needed.
+	// --- HISTORY COMMAND ---
+	if verb == "history" {
+		printHistory()
+		return true
+	}
+
+	// --- GATEKEEPER ---
 	if !isNumeric(verb) {
 		isRepeat := (verb == lastProcessedCmd)
 		timeDelta := time.Since(lastProcessedTime)
-
 		if isRepeat && timeDelta < time.Duration(ThrottleMs)*time.Millisecond {
-			fmt.Printf("[Throttle] Ignored duplicate: %s (Delta: %v)\n", verb, timeDelta)
+			fmt.Printf("[Throttle] Ignored duplicate: %s\n", verb)
 			return false
 		}
-
-		// Update Throttle State
 		lastProcessedCmd = verb
 		lastProcessedTime = time.Now()
 	}
+	fmt.Printf("Raw: %s | Processed: %s\n", rawCommand, finalCommand)
 
-	fmt.Printf("Raw Input: %s | Processed: %s\n", rawCommand, finalCommand)
-
-	// --- 1. MODIFIER KEY LOGIC ---
+	// --- 1. MODIFIER LOGIC ---
 	if isModifier(verb) {
 		handleModifier(verb)
+		updateHistory(finalCommand)
 		return true
 	}
 
-	// --- LOGIC: HANDLE NUMBER-ONLY INPUT ---
+	// --- 2. NUMBER LOGIC (Refinement & Concatenation) ---
 	if isNumeric(verb) && len(parts) == 1 {
 		if lastVerb == "" {
-			fmt.Println("Received number but no previous command context.")
 			return false
 		}
 
-		totalRequested := parseFuzzyNumber(verb)
-		
-		// --- THE FIX: Decrement by 1 ---
-		// User said "Right" (1 move executed). 
-		// User says "Seven" (wants 7 total moves).
-		// We execute 6 more.
-		remainingCount := totalRequested - 1 
+		now := time.Now()
+		timeSinceLast := now.Sub(lastProcessedTime)
 
-		if remainingCount <= 0 {
-			// If user says "One", total is 1. We already did 1. Do nothing.
-			lastVerb = ""
-			releaseAllModifiers() 
-			return true
+		// Determine if we are continuing a sequence
+		isRecent := timeSinceLast < time.Duration(SequenceTimeout)*time.Millisecond
+		isConcatenation := isRecent && lastNumericInput != ""
+
+		var targetTotal int
+		var newNumStr string
+
+		if isConcatenation {
+			// Case A: Concatenate (e.g., "2" -> "2") => "22"
+			newNumStr = lastNumericInput + verb
+			targetTotal, _ = strconv.Atoi(newNumStr)
+		} else if isRecent {
+			// Case B: Refinement (e.g., "Left" -> "2") => Total 2
+			newNumStr = verb
+			targetTotal = parseFuzzyNumber(verb)
+		} else {
+			// Case C: Fresh Number Command (Timeout expired)
+			newNumStr = verb
+			targetTotal = parseFuzzyNumber(verb)
+			lastTotalCount = 0
 		}
 
-		fmt.Printf("Repeating '%s' %d more times (Total Requested: %d)\n", lastVerb, remainingCount, totalRequested)
+		delta := targetTotal - lastTotalCount
 
-		switch lastVerb {
-		case "left", "right", "up", "down":
-			// Note: We use 100 as the multiplier here. 
-			// If your default move is 50, you might want to change this to 50.
-			distance := remainingCount * 100
-			handleMouse(fmt.Sprintf("%s %d", lastVerb, distance))
+		if delta > 0 {
+			fmt.Printf("[Sequence] Verb='%s' PrevTotal=%d NewTotal=%d Delta=%d (Concat=%v)\n",
+				lastVerb, lastTotalCount, targetTotal, delta, isConcatenation)
 
-		case "west", "east", "north", "south":
-			handleKeyboard(fmt.Sprintf("%s %d", lastVerb, remainingCount))
+			executeAction(lastVerb, delta, true)
 
-		case "click":
-			handleClick(fmt.Sprintf("%s %d", lastVerb, remainingCount))
-
-		default:
-			if len(lastVerb) == 1 {
-				for i := 0; i < remainingCount; i++ {
-					robotgo.KeyTap(lastVerb)
-					time.Sleep(5 * time.Millisecond)
-				}
-				fmt.Printf("(Keyboard) Typed '%s' %d times\n", lastVerb, remainingCount)
-			}
+			lastTotalCount = targetTotal
+			lastNumericInput = newNumStr
+			lastProcessedTime = now // Update time to keep the sequence alive
+			updateHistory(finalCommand)
+		} else {
+			fmt.Printf("[Sequence] Ignored non-positive delta: %d\n", delta)
 		}
 
-		// Reset context so we don't chain numbers endlessly
-		lastVerb = ""
-		releaseAllModifiers()
 		return true
 	}
 
-	// --- NORMAL EXECUTION ---
-	switch verb {
-	case "left", "right", "up", "down":
-		lastVerb = verb
-		// Updated default to 100 to match the numeric multiplier above
-		// This makes "Right" + "Seven" consistent mathematically.
-		handleMouse(cmd) 
+	// --- 3. STANDARD EXECUTION ---
+	success := executeAction(cmd, 1, false)
+	if success {
+		// Update context
+		if isAlphabet(verb) || isDirection(verb) || verb == "click" {
+			lastVerb = verb
+			// Reset sequence trackers for new verb
+			lastTotalCount = 1
+			lastNumericInput = ""
+		}
+		// CRITICAL: Delay before releasing modifiers
+		time.Sleep(50 * time.Millisecond)
 		releaseAllModifiers()
-	case "west", "east", "north", "south":
-		lastVerb = verb
-		handleKeyboard(cmd)
-		releaseAllModifiers()
-	case "click":
-		lastVerb = verb
-		handleClick(cmd)
-		releaseAllModifiers()
-
-	// --- ALPHABET HANDLING ---
-	case "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", 
-	     "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z":
-		lastVerb = verb
-		robotgo.KeyTap(verb)
-		releaseAllModifiers()
-
-	default:
-		fmt.Printf("Unknown Command Ignored: %s\n", finalCommand)
-		return false
+		updateHistory(finalCommand)
 	}
-
-	return true
+	return success
 }
 
-// --- Modifier Helpers ---
+// =========================================================================
+// --- CORE ACTION DISPATCH AND EXECUTION (INLINED LOGIC) ---
+// =========================================================================
+
+func executeAction(command string, count int, isNumericRepetition bool) bool {
+	parts := strings.Fields(command)
+	verb := parts[0]
+	args := parts[1:]
+
+	// Prepare modifiers for KeyTap
+	mods := make([]interface{}, len(activeModifiers))
+	for i, m := range activeModifiers {
+		mods[i] = m
+	}
+
+	switch verb {
+	// --- MOUSE MOVEMENT ACTIONS (LEFT, RIGHT, UP, DOWN) ---
+	case "left":
+		fallthrough
+	case "right":
+		fallthrough
+	case "up":
+		fallthrough
+	case "down":
+		// Mouse movements are not usually affected by key modifiers.
+		if isNumericRepetition {
+			// **UPDATED** to use MOUSE_REPETITION_DISTANCE
+			distance := count * MOUSE_REPETITION_DISTANCE
+			handleMouse(fmt.Sprintf("%s %d", verb, distance))
+		} else {
+			handleMouse(strings.Join(append([]string{verb}, args...), " "))
+		}
+		return true
+
+	// --- KEYBOARD DIRECTION ACTIONS (WEST, EAST, NORTH, SOUTH) ---
+	case "west":
+		fallthrough
+	case "east":
+		fallthrough
+	case "north":
+		fallthrough
+	case "south":
+		key := ""
+		switch verb {
+		case "west":
+			key = "left"
+		case "east":
+			key = "right"
+		case "north":
+			key = "up"
+		case "south":
+			key = "down"
+		}
+
+		if key != "" {
+			// Apply repetition and modifiers
+			for i := 0; i < count; i++ {
+				robotgo.KeyTap(key, mods...)
+				time.Sleep(5 * time.Millisecond)
+			}
+			fmt.Printf("(Keyboard) Pressed %s %d times with mods: %v\n", key, count, activeModifiers)
+			return true
+		}
+		return false
+
+	// --- CLICK ACTION ---
+	case "click":
+		cmdToSend := verb
+		if len(args) > 0 {
+			cmdToSend = strings.Join(append([]string{verb}, args...), " ")
+		}
+		if isNumericRepetition {
+			handleClick(fmt.Sprintf("%s %d", verb, count))
+		} else {
+			handleClick(cmdToSend)
+		}
+		return true
+
+	// --- DEFAULT / ALPHABET ACTION ---
+	default:
+		if isAlphabet(verb) {
+			// Apply repetition and modifiers
+			for i := 0; i < count; i++ {
+				robotgo.KeyTap(verb, mods...)
+				time.Sleep(5 * time.Millisecond)
+			}
+			fmt.Printf("(Keyboard) Pressed %s %d times with mods: %v\n", verb, count, activeModifiers)
+			return true
+		}
+		return false
+	}
+}
+
+// =========================================================================
+// --- HELPER FUNCTIONS ---
+// =========================================================================
+
+// --- History Helpers ---
+
+func loadHistory() []HistoryItem {
+	file, err := os.ReadFile(HistoryFile)
+	if err != nil {
+		return []HistoryItem{}
+	}
+	var history []HistoryItem
+	json.Unmarshal(file, &history)
+	return history
+}
+
+func saveHistory(history []HistoryItem) {
+	data, _ := json.MarshalIndent(history, "", "  ")
+	os.WriteFile(HistoryFile, data, 0644)
+}
+
+func updateHistory(cmd string) {
+	history := loadHistory()
+
+	// Determine next ID index based on the last item in history
+	nextIndex := 0
+	if len(history) > 0 {
+		lastID := history[len(history)-1].ID
+		// Find index of lastID in idWords
+		for i, word := range idWords {
+			if word == lastID {
+				nextIndex = i + 1
+				break
+			}
+		}
+	}
+
+	// Loop back to 0 if we reached the end of the word list
+	if nextIndex >= len(idWords) {
+		nextIndex = 0
+	}
+
+	id := idWords[nextIndex]
+
+	newItem := HistoryItem{
+		ID:      id,
+		Command: cmd,
+	}
+
+	history = append(history, newItem)
+
+	if len(history) > 100 {
+		history = history[len(history)-100:]
+	}
+	saveHistory(history)
+}
+
+func printHistory() {
+	history := loadHistory()
+	count := 5
+	if len(history) < count {
+		count = len(history)
+	}
+	fmt.Println("--- Recent History ---")
+	// Show newest first
+	for i := 0; i < count; i++ {
+		idx := len(history) - 1 - i
+		item := history[idx]
+		fmt.Printf("%d. [%s] %s\n", i+1, item.ID, item.Command)
+	}
+}
+
+// --- Key Mapping Helpers ---
+
+// getModifierKey returns the robotgo key identifier for a given spoken verb,
+// ensuring cross-platform compatibility.
+func getModifierKey(verb string) string {
+	switch verb {
+	case "control", "ctrl":
+		if runtime.GOOS == "darwin" {
+			return "lctrl"
+		}
+		return "control"
+	case "command", "cmd":
+		if runtime.GOOS == "darwin" {
+			return "cmd"
+		}
+		return "control"
+	case "shift":
+		return "shift"
+	case "alt":
+		return "alt"
+	case "option":
+		return "alt"
+	case "function":
+		return ""
+	default:
+		return ""
+	}
+}
+
+// --- Modifier Handlers ---
 
 func isModifier(word string) bool {
 	switch word {
-	case "control", "command", "option", "alt", "shift":
+	case "control", "ctrl", "command", "cmd", "option", "alt", "shift":
 		return true
 	}
 	return false
 }
 
-func handleModifier(word string) {
-	key := word
-	if key == "option" {
-		key = "alt"
-	} else if key == "command" {
-		key = "cmd"
+func handleModifier(spokenWord string) {
+	key := getModifierKey(spokenWord)
+
+	if key == "" {
+		return
 	}
 
 	for _, m := range activeModifiers {
@@ -248,6 +445,7 @@ func releaseAllModifiers() {
 	if len(activeModifiers) == 0 {
 		return
 	}
+	// LIFO Release
 	for i := len(activeModifiers) - 1; i >= 0; i-- {
 		key := activeModifiers[i]
 		robotgo.KeyToggle(key, "up")
@@ -257,7 +455,23 @@ func releaseAllModifiers() {
 	activeModifiers = []string{}
 }
 
-// --- Input Helpers ---
+// --- General Helpers ---
+
+func isAlphabet(s string) bool {
+	if len(s) != 1 {
+		return false
+	}
+	char := s[0]
+	return char >= 'a' && char <= 'z'
+}
+
+func isDirection(s string) bool {
+	switch s {
+	case "left", "right", "up", "down", "west", "east", "north", "south":
+		return true
+	}
+	return false
+}
 
 func handleMouse(command string) {
 	parts := strings.Fields(command)
@@ -265,8 +479,8 @@ func handleMouse(command string) {
 		return
 	}
 	direction := parts[0]
-	// Changed default to 100 to match the numeric multiplier logic
-	val := 100 
+	// **UPDATED** to use MOUSE_MOVE_DISTANCE as the default value
+	val := MOUSE_MOVE_DISTANCE
 	if len(parts) > 1 {
 		if v := parseFuzzyNumber(parts[1]); v > 0 {
 			val = v
@@ -286,56 +500,21 @@ func handleMouse(command string) {
 	fmt.Printf("(Mouse) Moved %s by %d px\n", direction, val)
 }
 
-func handleKeyboard(command string) {
-	parts := strings.Fields(command)
-	if len(parts) < 1 {
-		return
-	}
-	cardinalDirection := parts[0]
-	count := 1 
-	if len(parts) > 1 {
-		if v := parseFuzzyNumber(parts[1]); v > 0 {
-			count = v
-		}
-	}
-
-	key := ""
-	switch cardinalDirection {
-	case "west":
-		key = "left"
-	case "east":
-		key = "right"
-	case "north":
-		key = "up"
-	case "south":
-		key = "down"
-	}
-
-	if key != "" {
-		for i := 0; i < count; i++ {
-			robotgo.KeyTap(key)
-			time.Sleep(5 * time.Millisecond)
-		}
-		fmt.Printf("(Keyboard) Pressed %s (mapped from %s) %d times\n", key, cardinalDirection, count)
-	}
-}
-
 func handleClick(command string) {
 	parts := strings.Fields(command)
-	count := 1 
+	count := 1
 	if len(parts) > 1 {
 		if v := parseFuzzyNumber(parts[1]); v > 0 {
 			count = v
 		}
 	}
-
 	for i := 0; i < count; i++ {
 		robotgo.Click("left")
+		time.Sleep(50 * time.Millisecond)
 	}
 	fmt.Printf("(Mouse) Clicked left %d times\n", count)
 }
 
-// isNumeric checks if a string is a valid integer representation
 func isNumeric(s string) bool {
 	_, err := strconv.Atoi(s)
 	return err == nil
@@ -376,8 +555,8 @@ func preprocessCommand(input string) string {
 			punctuation := ""
 			if len(word) > len(cleanWord) {
 				punctuation = word[len(cleanWord):]
+				words[i] = val + punctuation
 			}
-			words[i] = val + punctuation
 		}
 	}
 	return strings.Join(words, " ")
