@@ -22,12 +22,16 @@ const (
 	ServerPort    = "8000"
 	ThrottleMs    = 200
 	MouseDistance = 50
+	HistoryFile   = "history.json"
 )
 
 // --- GLOBAL STATE ---
 var (
 	mu              sync.Mutex
 	lastSuccessTime time.Time
+
+	// History System
+	history = &HistoryManager{}
 
 	// Modifiers are just strings we track; we NEVER hold them down physically
 	// until the final action command is executed.
@@ -73,9 +77,27 @@ var (
 		"three": "3", "four": "4", "for": "4", "five": "5",
 		"six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
 	}
+
+	// The 100 Distinct Trigger Words
+	HistoryTriggers = []string{
+		"acorn", "beacon", "cactus", "dial", "eagle", "falcon", "garden", "harbor", "iceberg", "jungle",
+		"lantern", "magnet", "nectar", "oasis", "paddle", "quilt", "radar", "saddle", "tablet", "ultra",
+		"valley", "wagon", "yacht", "zebra", "amber", "bronze", "cedar", "denim", "ember", "fabric",
+		"gadget", "habit", "icon", "jacket", "kabob", "laser", "marble", "nacho", "orbit", "packet",
+		"quartz", "razor", "safari", "tactic", "vacuum", "wafer", "yarn", "zenith", "apron", "barrel",
+		"canvas", "dagger", "easel", "fable", "gasket", "haven", "idiom", "joker", "kennel", "ladder",
+		"mantle", "napkin", "object", "palace", "quiver", "rabbit", "saint", "talent", "uncle", "vapor",
+		"waffle", "yellow", "zone", "arrow", "basket", "candle", "danger", "earth", "fantasy", "galaxy",
+		"hammer", "image", "jazz", "kettle", "lemon", "magic", "nature", "ocean", "panda", "queen",
+		"radius", "salad", "target", "unit", "velvet", "wallet", "yogurt", "zoom",
+	}
 )
 
+// --- MAIN EXECUTION ---
+
 func main() {
+	history.Init() // Load or create history file
+
 	errChan := make(chan error, 2)
 	go func() {
 		fmt.Printf("Client running on port %s\n", ClientPort)
@@ -152,6 +174,14 @@ func processAndExecute(rawInput string) (bool, string) {
 		return false, "empty"
 	}
 
+	// 1. HISTORY CHECK
+	// Did the user say a trigger word (e.g., "acorn")?
+	if historicCmd, found := history.FindCommand(cleanedInput); found {
+		fmt.Printf("[History] Trigger '%s' -> Executing '%s'\n", cleanedInput, historicCmd)
+		cleanedInput = historicCmd
+	}
+
+	// 2. DIGIT HANDLING (Accumulator)
 	digitStr, isNumber := getDigitString(cleanedInput)
 
 	if isNumber {
@@ -169,9 +199,12 @@ func processAndExecute(rawInput string) (bool, string) {
 		if delta > 0 {
 			executeAction(lastVerb, delta)
 			executedCount += delta
+			// PUSH NUMBER TO HISTORY
+			history.Push(cleanedInput)
 		}
 
 	} else {
+		// 3. COMMAND HANDLING
 		words := strings.Fields(cleanedInput)
 		command := words[len(words)-1]
 
@@ -185,6 +218,9 @@ func processAndExecute(rawInput string) (bool, string) {
 
 		executeAction(command, 1)
 		executedCount = 1
+
+		// PUSH VERB TO HISTORY
+		history.Push(cleanedInput)
 	}
 
 	lastSuccessTime = time.Now()
@@ -201,7 +237,6 @@ func executeAction(verb string, count int) {
 	}
 
 	// 2. SNAPSHOT MODIFIERS FOR USAGE AND CLEANUP
-	// We capture these now because we want to release exactly these keys later.
 	currentMods := make([]string, len(pendingModifiers))
 	copy(currentMods, pendingModifiers)
 
@@ -238,9 +273,7 @@ func executeAction(verb string, count int) {
 		}
 	}
 
-	// 4. FORCE RELEASE MODIFIERS (The "Sticky Key" Fix)
-	// Iterate through the modifiers that were pending and explicitly toggle them UP.
-	// This fixes the issue where the OS thinks a key is still held down.
+	// 4. FORCE RELEASE MODIFIERS
 	if len(currentMods) > 0 {
 		for _, m := range currentMods {
 			robotgo.KeyToggle(m, "up")
@@ -248,8 +281,102 @@ func executeAction(verb string, count int) {
 	}
 
 	// 5. CLEAR GLOBAL STATE
-	// Modifiers are always cleared after a valid command execution or release
 	pendingModifiers = []string{}
+}
+
+// --- HISTORY MANAGER ---
+
+type HistoryEntry struct {
+	Trigger string `json:"trigger"`
+	Command string `json:"command"`
+}
+
+type HistoryManager struct {
+	mu      sync.Mutex
+	Entries []HistoryEntry
+}
+
+func (h *HistoryManager) Init() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Load existing file
+	file, err := os.ReadFile(HistoryFile)
+	if err == nil {
+		json.Unmarshal(file, &h.Entries)
+	}
+
+	// Repair/Initialize to ensure 100 specific words
+	if len(h.Entries) != 100 {
+		newEntries := make([]HistoryEntry, 100)
+		for i, word := range HistoryTriggers {
+			cmd := ""
+			// Keep existing command if we are resizing/repairing
+			if i < len(h.Entries) && h.Entries[i].Trigger == word {
+				cmd = h.Entries[i].Command
+			}
+			newEntries[i] = HistoryEntry{
+				Trigger: word,
+				Command: cmd,
+			}
+		}
+		h.Entries = newEntries
+		h.save()
+	}
+}
+
+// Push adds a command to "acorn" (index 0) and shifts everything else down
+func (h *HistoryManager) Push(newCommand string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if len(h.Entries) == 0 {
+		return
+	}
+
+	// Dedup: If the most recent command is already this command, ignore
+	if h.Entries[0].Command == newCommand {
+		return
+	}
+
+	// Create a temp slice of just the commands
+	// We only need the commands because triggers are fixed
+	cmds := make([]string, 100)
+	for i := range h.Entries {
+		cmds[i] = h.Entries[i].Command
+	}
+
+	// SHIFT RIGHT LOGIC
+	// [A, B, C, ...] -> [New, A, B, ...]
+	// Move everything from index 0-98 to 1-99
+	copy(cmds[1:], cmds[0:99])
+
+	// Insert new command at top
+	cmds[0] = newCommand
+
+	// Re-assign to structs
+	for i := range h.Entries {
+		h.Entries[i].Command = cmds[i]
+	}
+
+	h.save()
+}
+
+func (h *HistoryManager) FindCommand(trigger string) (string, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, entry := range h.Entries {
+		if entry.Trigger == trigger && entry.Command != "" {
+			return entry.Command, true
+		}
+	}
+	return "", false
+}
+
+func (h *HistoryManager) save() {
+	data, _ := json.MarshalIndent(h.Entries, "", "  ")
+	os.WriteFile(HistoryFile, data, 0644)
 }
 
 // --- MODIFIER LOGIC (Stateless/Atomic) ---
@@ -279,7 +406,6 @@ func queueModifier(word string) {
 		}
 	}
 
-	// Deduplication: Don't add "cmd" if "cmd" is already there
 	for _, m := range pendingModifiers {
 		if m == key {
 			return
@@ -291,17 +417,12 @@ func queueModifier(word string) {
 }
 
 func safeModifierClick(mods []interface{}) {
-	// Temporarily hold down mods
 	for _, m := range mods {
 		if s, ok := m.(string); ok {
 			robotgo.KeyToggle(s, "down")
 		}
 	}
-
-	// Perform click
 	robotgo.Click("left")
-
-	// Release mods immediately
 	for _, m := range mods {
 		if s, ok := m.(string); ok {
 			robotgo.KeyToggle(s, "up")
