@@ -178,9 +178,9 @@ class SniperCore {
   private audio: AudioManager;
   private ui: UIManager;
   private recognition: SpeechRecognition | null = null;
-  
+    
   private lastActionCommand: string = '';
-  
+    
   // Deduplication & Throttling State
   private previousProcessedToken: string = '';
   private lastResultIndex: number = -1; 
@@ -194,6 +194,7 @@ class SniperCore {
   };
 
   private numberMap: Record<string, string> = {
+    // English (For Repetition Logic)
     "zero": "0", "one": "1", "won": "1", 
     "two": "2", "to": "2", "too": "2",
     "three": "3", "tree": "3",
@@ -209,7 +210,10 @@ class SniperCore {
     "seventeen": "17", "eighteen": "18", "nineteen": "19",
     "twenty": "20", "thirty": "30", "forty": "40", 
     "fifty": "50", "sixty": "60", "seventy": "70", 
-    "eighty": "80", "ninety": "90", "hundred": "100"
+    "eighty": "80", "ninety": "90", "hundred": "100",
+    
+    // NOTE: Spanish removed from here so they are treated as commands
+    // and handled by the server to type literal numbers.
   };
 
   constructor(audio: AudioManager, ui: UIManager) {
@@ -287,20 +291,28 @@ class SniperCore {
         const processed = this.preprocessNumber(transcript);
         
         const baseCommands = [
+            'number',
             // Controls
             'north', 'south', 'east', 'west', 'option', 'alt', 'command', 'control', 
             'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again', 'release', 'shift',
+            'space', 'back', 'enter', 'tab', 'escape',
+        
+
             // Phonetic Alphabet
             'alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 
             'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec', 'romeo', 
-            'sierra', 'tango', 'uniform', 'victor', 'whiskey', 'xray', 'yankee', 'zulu'
+            'sierra', 'tango', 'uniform', 'victor', 'whiskey', 'xray', 'yankee', 'zulu',
+
+            // Symbols (Standard Keyboard)
+            'tilde', 'tick', 'bang', 'at', 'hash', 'dollar', 'percent', 'caret', 'peak', 'ampersand', 'star', 
+            'open', 'close', 'underscore', 'floor', 'plus', 'minus', 'equal', 
+            'brace', 'curly', 'lock', 'rcurly', 'bracket', 'rbracket', 'kit', 'pipe', 'bar', 'backslash', 
+            'colon', 'semicolon', 'quote', 'single', 'comma', 'tail', 'dot', 'question', 'slash', 
+            'less', 'greater', 'wave'
         ];
         
         const isCommand = baseCommands.includes(processed);
         const isNumber = /^\d+$/.test(processed);
-        
-        // REMOVED: const isLetter = /^[a-z]$/.test(processed);
-        // Only allow explicit commands (including phonetics) and numbers.
         
         if (isCommand || isNumber) {
             
@@ -390,7 +402,7 @@ class SniperCore {
             this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
             return;
     }
-      
+        
     // --- SERVER-SIDE COMMANDS ---
     // Only send if logging is ENABLED
     if (this.state.isLogging) {

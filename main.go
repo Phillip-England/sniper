@@ -29,23 +29,24 @@ const (
 // --- INTERFACES & TYPES ---
 
 // ActionExecutor abstracts the physical side effects (RobotGo)
-// allowing for easier testing or future library swaps.
 type ActionExecutor interface {
 	MoveMouse(x, y int)
 	GetMousePos() (int, int)
 	TapKey(key string, modifiers []interface{})
 	ToggleKey(key string, direction string)
 	Click(btn string)
+	TypeStr(str string)
 }
 
 // RobotGoExecutor is the concrete implementation of ActionExecutor
 type RobotGoExecutor struct{}
 
-func (r *RobotGoExecutor) MoveMouse(x, y int)                 { robotgo.Move(x, y) }
-func (r *RobotGoExecutor) GetMousePos() (int, int)            { return robotgo.Location() }
-func (r *RobotGoExecutor) TapKey(k string, m []interface{})   { robotgo.KeyTap(k, m...) }
-func (r *RobotGoExecutor) ToggleKey(k string, d string)       { robotgo.KeyToggle(k, d) }
-func (r *RobotGoExecutor) Click(btn string)                   { robotgo.Click(btn) }
+func (r *RobotGoExecutor) MoveMouse(x, y int)               { robotgo.Move(x, y) }
+func (r *RobotGoExecutor) GetMousePos() (int, int)          { return robotgo.Location() }
+func (r *RobotGoExecutor) TapKey(k string, m []interface{}) { robotgo.KeyTap(k, m...) }
+func (r *RobotGoExecutor) ToggleKey(k string, d string)     { robotgo.KeyToggle(k, d) }
+func (r *RobotGoExecutor) Click(btn string)                 { robotgo.Click(btn) }
+func (r *RobotGoExecutor) TypeStr(str string)               { robotgo.TypeStr(str) }
 
 // --- DOMAIN DATA ---
 
@@ -61,7 +62,55 @@ var (
 		"yankee": "y", "zulu": "z",
 	}
 
-	// Digit Mapping
+	// Spanish Number Mapping (Direct Typing)
+	spanishMap = map[string]string{
+		"cero": "0", "uno": "1", "dos": "2", "tres": "3",
+		"cuatro": "4", "quatro": "4", "cinco": "5", "seis": "6",
+		"siete": "7", "ocho": "8", "nueve": "9", "diez": "10",
+	}
+
+	// Symbol / Special Character Mapping
+	symbolMap = map[string]string{
+		// Row 1 (Shift + Numbers)
+		"tilde": "~", "wave": "~",
+		"tick": "`",
+		"bang": "!",
+		"at": "@",
+		"hash": "#",
+		"dollar": "$",
+		"percent": "%",
+		"caret": "^", "peak": "^",
+		"ampersand": "&", "and": "&",
+		"star": "*",
+		"open": "(",
+		"close": ")",
+		"underscore": "_", "floor": "_",
+		"plus": "+",
+		"minus": "-",
+
+		// Row 2/3 (Brackets, Slashes, etc)
+		"equal": "=",
+		"brace": "{", "curly": "{",
+		"lock": "}", "rcurly": "}", // "lock" preserved for backward compat
+		"bracket": "[",
+		"kit": "]", "rbracket": "]", // "kit" preserved for backward compat
+		"pipe": "|", "bar": "|",
+		"backslash": "\\", // "back" removed to avoid conflict with backspace/direction
+		"slash": "/",
+
+		// Punctuation
+		"colon": ":",
+		"semicolon": ";",
+		"quote": "\"",
+		"single": "'",
+		"less": "<",
+		"greater": ">", "great": ">",
+		"comma": ",", "tail": ",",
+		"dot": ".",
+		"question": "?",
+	}
+
+	// Digit Mapping (For Accumulator Logic)
 	digitMap = map[string]string{
 		"zero": "0", "one": "1", "won": "1", "two": "2", "to": "2", "too": "2",
 		"three": "3", "four": "4", "for": "4", "five": "5",
@@ -70,32 +119,41 @@ var (
 
 	// Valid Commands Whitelist
 	validCommands = map[string]bool{
+		// Directions / Mouse
 		"left": true, "right": true, "up": true, "down": true,
 		"west": true, "east": true, "north": true, "south": true,
 		"click": true, "exit": true,
+		// Modifiers
 		"control": true, "command": true, "option": true, "alt": true, "shift": true,
 		"release": true,
+		// Typing Controls
+		"backspace": true, "space": true, "enter": true, "tab": true, "escape": true,
+		"number": true, "back": true, // Added "back" explicitly
 	}
 )
 
 func init() {
-	// Merge phonetics into valid commands
+	// Merge maps into valid commands
 	for k := range phoneticMap {
+		validCommands[k] = true
+	}
+	for k := range symbolMap {
+		validCommands[k] = true
+	}
+	for k := range spanishMap {
 		validCommands[k] = true
 	}
 }
 
 // --- STATE MANAGEMENT ---
 
-// SessionState holds the mutable state of the user's interaction flow.
-// It replaces the loose global variables.
 type SessionState struct {
-	mu               sync.Mutex
-	lastSuccessTime  time.Time
-	pendingModifiers []string
-	lastVerb         string
+	mu                sync.Mutex
+	lastSuccessTime   time.Time
+	pendingModifiers  []string
+	lastVerb          string
 	numberAccumulator string
-	executedCount    int
+	executedCount     int
 }
 
 func NewSessionState() *SessionState {
@@ -130,7 +188,6 @@ func NewSniperEngine(hist *HistoryManager, exec ActionExecutor) *SniperEngine {
 	}
 }
 
-// ProcessInput is the main entry point for a voice command
 func (e *SniperEngine) ProcessInput(rawInput string) (bool, string) {
 	if e.state.CheckThrottle() {
 		return false, "throttle"
@@ -164,6 +221,16 @@ func (e *SniperEngine) handleDigitSequence(digitStr, originalInput string) (bool
 	if e.state.lastVerb == "" {
 		return false, "no_context"
 	}
+
+	// MODE: Typing Numbers (e.g., "number five")
+	if e.state.lastVerb == "number" {
+		e.executor.TypeStr(digitStr)
+		// We don't accumulate or limit here; we just type what we hear
+		e.history.Push(originalInput)
+		return true, ""
+	}
+
+	// MODE: Repetition (e.g., "down five")
 	if len(e.state.numberAccumulator) >= 2 {
 		return true, "limit_reached"
 	}
@@ -182,7 +249,7 @@ func (e *SniperEngine) handleDigitSequence(digitStr, originalInput string) (bool
 
 func (e *SniperEngine) handleCommand(input string) (bool, string) {
 	words := strings.Fields(input)
-	command := words[len(words)-1] // Take last word
+	command := words[len(words)-1]
 
 	if !validCommands[command] {
 		return false, "invalid"
@@ -199,30 +266,40 @@ func (e *SniperEngine) handleCommand(input string) (bool, string) {
 	return true, ""
 }
 
-// executeActionLocked assumes the caller holds the state lock
 func (e *SniperEngine) executeActionLocked(verb string, count int) {
 	fmt.Printf("[Execute] %s x %d | Pending Mods: %v\n", verb, count, e.state.pendingModifiers)
 
-	// 1. Modifier Handling (Queueing)
+	// 1. Modifier Handling
 	if e.isModifier(verb) {
 		e.queueModifier(verb)
 		return
 	}
 
-	// 2. Prepare Modifiers for Execution
+	// 2. Prepare Modifiers
 	currentMods := make([]interface{}, len(e.state.pendingModifiers))
 	for i, v := range e.state.pendingModifiers {
 		currentMods[i] = v
 	}
-	// Copy string slice for cleanup later
 	cleanupMods := make([]string, len(e.state.pendingModifiers))
 	copy(cleanupMods, e.state.pendingModifiers)
 
 	// 3. Execution Loop
 	for i := 0; i < count; i++ {
 		switch verb {
+		case "number":
+			// No-op: "number" is purely a context verb for the next digit input
+		case "space":
+			e.executor.TapKey("space", currentMods)
+		case "back":
+			e.executor.TapKey("backspace", currentMods)
+		case "enter":
+			e.executor.TapKey("enter", currentMods)
+		case "tab":
+			e.executor.TapKey("tab", currentMods)
+		case "escape":
+			e.executor.TapKey("escape", currentMods)
 		case "release":
-			// No-op here, cleanup handles release
+			// No-op, cleanup handles release
 		case "left", "right", "up", "down":
 			e.handleMouse(verb, MouseDistance)
 		case "west", "east", "north", "south":
@@ -232,8 +309,12 @@ func (e *SniperEngine) executeActionLocked(verb string, count int) {
 		case "exit":
 			os.Exit(0)
 		default:
-			// Phonetic / Single Key
-			if key, ok := phoneticMap[verb]; ok {
+			// Check Maps
+			if symbol, ok := symbolMap[verb]; ok {
+				e.executor.TypeStr(symbol)
+			} else if digit, ok := spanishMap[verb]; ok {
+				e.executor.TypeStr(digit)
+			} else if key, ok := phoneticMap[verb]; ok {
 				e.executor.TapKey(key, currentMods)
 			} else if len(verb) == 1 {
 				e.executor.TapKey(verb, currentMods)
@@ -245,7 +326,7 @@ func (e *SniperEngine) executeActionLocked(verb string, count int) {
 		}
 	}
 
-	// 4. Cleanup (Release Modifiers)
+	// 4. Cleanup Modifiers
 	if len(cleanupMods) > 0 {
 		for _, m := range cleanupMods {
 			e.executor.ToggleKey(m, "up")
@@ -290,7 +371,6 @@ func (e *SniperEngine) handleDirectionalKeys(cardinal string, mods []interface{}
 }
 
 func (e *SniperEngine) safeModifierClick(mods []interface{}) {
-	// RobotGo needs keys held down manually for clicks sometimes
 	for _, m := range mods {
 		if s, ok := m.(string); ok {
 			e.executor.ToggleKey(s, "down")
@@ -400,12 +480,10 @@ func (h *HistoryManager) Init() {
 		json.Unmarshal(file, &h.Entries)
 	}
 
-	// Ensure structural integrity (exact 100 slots matching HistoryTriggers)
 	if len(h.Entries) != len(HistoryTriggers) {
 		newEntries := make([]HistoryEntry, len(HistoryTriggers))
 		for i, word := range HistoryTriggers {
 			cmd := ""
-			// Migration logic: attempt to keep existing command if index matches
 			if i < len(h.Entries) && h.Entries[i].Trigger == word {
 				cmd = h.Entries[i].Command
 			}
@@ -423,22 +501,18 @@ func (h *HistoryManager) Push(newCommand string) {
 	if len(h.Entries) == 0 {
 		return
 	}
-	// Deduplication: Don't push if it matches the top of the stack
 	if h.Entries[0].Command == newCommand {
 		return
 	}
 
-	// Extract commands only
 	cmds := make([]string, len(h.Entries))
 	for i := range h.Entries {
 		cmds[i] = h.Entries[i].Command
 	}
 
-	// Shift Right: [0,1,2] -> [New, 0, 1]
 	copy(cmds[1:], cmds[0:len(cmds)-1])
 	cmds[0] = newCommand
 
-	// Re-map to structs
 	for i := range h.Entries {
 		h.Entries[i].Command = cmds[i]
 	}
@@ -465,12 +539,10 @@ func (h *HistoryManager) save() {
 // --- MAIN APPLICATION ---
 
 func main() {
-	// Initialize Dependencies
 	history := NewHistoryManager()
 	executor := &RobotGoExecutor{}
 	engine := NewSniperEngine(history, executor)
 
-	// Orchestrator
 	errChan := make(chan error, 2)
 	go func() {
 		fmt.Printf("Client running on port %s\n", ClientPort)
@@ -487,7 +559,6 @@ func main() {
 	log.Fatal(<-errChan)
 }
 
-// runClientSide serves the static frontend
 func runClientSide() error {
 	app := vii.NewApp()
 	app.Use(vii.MwLogger, vii.MwTimeout(10), vii.MwCORS)
@@ -500,7 +571,6 @@ func runClientSide() error {
 		vii.ExecuteTemplate(w, r, "index.html", nil)
 	})
 	app.At("GET /mouse", func(w http.ResponseWriter, r *http.Request) {
-		// Mock data for template rendering as per original file structure
 		data := map[string]interface{}{"Locations": map[string]interface{}{}}
 		vii.ExecuteTemplate(w, r, "mouse.html", data)
 	})
@@ -510,7 +580,6 @@ func runClientSide() error {
 	return app.Serve(ClientPort)
 }
 
-// runServerSide serves the API
 func runServerSide(engine *SniperEngine) error {
 	app := vii.NewApp()
 	app.Use(vii.MwLogger, vii.MwTimeout(10), vii.MwCORS)
@@ -523,8 +592,8 @@ func runServerSide(engine *SniperEngine) error {
 		var req struct {
 			Command string `json:"command"`
 		}
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
