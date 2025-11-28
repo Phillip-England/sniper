@@ -225,6 +225,8 @@ class SniperCore {
           "off",
           "exit",
           "again",
+          "release",
+          "shift",
           "alpha",
           "bravo",
           "charlie",

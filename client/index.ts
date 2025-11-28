@@ -289,7 +289,7 @@ class SniperCore {
         const baseCommands = [
             // Controls
             'north', 'south', 'east', 'west', 'option', 'alt', 'command', 'control', 
-            'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again',
+            'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again', 'release', 'shift',
             // Phonetic Alphabet
             'alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 
             'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec', 'romeo', 

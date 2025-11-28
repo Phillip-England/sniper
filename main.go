@@ -29,7 +29,8 @@ var (
 	mu              sync.Mutex
 	lastSuccessTime time.Time
 
-	// CHANGED: Modifiers are just strings we track, we don't press them immediately
+	// Modifiers are just strings we track; we NEVER hold them down physically
+	// until the final action command is executed.
 	pendingModifiers []string
 
 	// STATE FOR ACCUMULATION
@@ -44,7 +45,8 @@ var (
 		"west": true, "east": true, "north": true, "south": true,
 		"click": true, "exit": true,
 		"control": true, "command": true, "option": true, "alt": true, "shift": true,
-		
+		"release": true,
+
 		// Phonetic Alphabet
 		"alpha": true, "bravo": true, "charlie": true, "delta": true,
 		"echo": true, "foxtrot": true, "golf": true, "hotel": true,
@@ -190,23 +192,29 @@ func processAndExecute(rawInput string) (bool, string) {
 }
 
 func executeAction(verb string, count int) {
-	fmt.Printf("[Execute] %s x %d | Mods: %v\n", verb, count, pendingModifiers)
+	fmt.Printf("[Execute] %s x %d | Pending Mods: %v\n", verb, count, pendingModifiers)
 
-	// 1. IF MODIFIER: Just queue it and return.
+	// 1. IF MODIFIER: Queue it, do NOT press it, and return.
 	if isModifier(verb) {
 		queueModifier(verb)
 		return
 	}
 
-	// 2. CONVERT MODIFIERS TO INTERFACE for robotgo
-	modInterface := make([]interface{}, len(pendingModifiers))
-	for i, v := range pendingModifiers {
+	// 2. SNAPSHOT MODIFIERS FOR USAGE AND CLEANUP
+	// We capture these now because we want to release exactly these keys later.
+	currentMods := make([]string, len(pendingModifiers))
+	copy(currentMods, pendingModifiers)
+
+	modInterface := make([]interface{}, len(currentMods))
+	for i, v := range currentMods {
 		modInterface[i] = v
 	}
 
 	// 3. PERFORM ACTION LOOP
 	for i := 0; i < count; i++ {
 		switch verb {
+		case "release":
+			// No action needed; cleanup block below will release keys
 		case "left", "right", "up", "down":
 			handleMouse(verb, MouseDistance)
 		case "west", "east", "north", "south":
@@ -220,7 +228,7 @@ func executeAction(verb string, count int) {
 			if key, ok := phoneticMap[verb]; ok {
 				robotgo.KeyTap(key, modInterface...)
 			} else if len(verb) == 1 {
-				// Fallback for single letters if they slip through
+				// Fallback for single letters
 				robotgo.KeyTap(verb, modInterface...)
 			}
 		}
@@ -230,7 +238,17 @@ func executeAction(verb string, count int) {
 		}
 	}
 
-	// 4. CLEANUP
+	// 4. FORCE RELEASE MODIFIERS (The "Sticky Key" Fix)
+	// Iterate through the modifiers that were pending and explicitly toggle them UP.
+	// This fixes the issue where the OS thinks a key is still held down.
+	if len(currentMods) > 0 {
+		for _, m := range currentMods {
+			robotgo.KeyToggle(m, "up")
+		}
+	}
+
+	// 5. CLEAR GLOBAL STATE
+	// Modifiers are always cleared after a valid command execution or release
 	pendingModifiers = []string{}
 }
 
@@ -261,7 +279,7 @@ func queueModifier(word string) {
 		}
 	}
 
-	// Deduplication
+	// Deduplication: Don't add "cmd" if "cmd" is already there
 	for _, m := range pendingModifiers {
 		if m == key {
 			return
@@ -273,12 +291,17 @@ func queueModifier(word string) {
 }
 
 func safeModifierClick(mods []interface{}) {
+	// Temporarily hold down mods
 	for _, m := range mods {
 		if s, ok := m.(string); ok {
 			robotgo.KeyToggle(s, "down")
 		}
 	}
+
+	// Perform click
 	robotgo.Click("left")
+
+	// Release mods immediately
 	for _, m := range mods {
 		if s, ok := m.(string); ok {
 			robotgo.KeyToggle(s, "up")
