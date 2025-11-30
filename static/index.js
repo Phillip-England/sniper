@@ -177,7 +177,6 @@ class SniperCore {
         const alternative = result[0];
         if (!alternative)
           continue;
-        console.log(`[RAW SPEECH DETECTED]: ${alternative.transcript} (Final: ${result.isFinal})`);
         if (result.isFinal) {
           finalChunk += alternative.transcript;
         } else {
@@ -229,18 +228,6 @@ class SniperCore {
       this.lastCommand = command;
     }
     switch (command.replace(/[.,]/g, "")) {
-      case "help history":
-        this.audio.play("click");
-        window.open("http://localhost:3000/history", "_blank");
-        return { capturedByCommand: true };
-      case "help scripts":
-        this.audio.play("click");
-        window.open("http://localhost:3000/scripts", "_blank");
-        return { capturedByCommand: true };
-      case "help shortcuts":
-        this.audio.play("click");
-        window.open("http://localhost:3000/shortcuts", "_blank");
-        return { capturedByCommand: true };
       case "exit":
         this.audio.play("sniper-exit");
         this.ui.clearText();
@@ -264,17 +251,6 @@ class SniperCore {
         }
         return { capturedByCommand: false };
     }
-  }
-  closeOpenedWindows() {
-    let closedCount = 0;
-    this.openedWindows.forEach((win) => {
-      if (win && !win.closed) {
-        win.close();
-        closedCount++;
-      }
-    });
-    this.openedWindows = [];
-    console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
   }
   bindEvents() {
     const btn = this.ui.getRecordButton();

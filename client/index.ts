@@ -273,11 +273,6 @@ class SniperCore {
         const alternative = result[0];
         if (!alternative) continue;
 
-        // ========================================================
-        // >>> CONSOLE LOG ADDED HERE FOR IMMEDIATE FEEDBACK <<<
-        // ========================================================
-        console.log(`[RAW SPEECH DETECTED]: ${alternative.transcript} (Final: ${result.isFinal})`);
-
         if (result.isFinal) {
           finalChunk += alternative.transcript;
         } else {
@@ -344,21 +339,6 @@ private handleCommands(text: string): { capturedByCommand: boolean } {
     // --- STATIC COMMANDS ---
     switch (command.replace(/[.,]/g, '')) { 
       // ... existing cases ...
-
-      case 'help history':
-        this.audio.play('click');
-        window.open('http://localhost:3000/history', '_blank');
-        return { capturedByCommand: true };
-
-      case 'help scripts':
-        this.audio.play('click');
-        window.open('http://localhost:3000/scripts', '_blank');
-        return { capturedByCommand: true };
-
-      case 'help shortcuts':
-        this.audio.play('click');
-        window.open('http://localhost:3000/shortcuts', '_blank');
-        return { capturedByCommand: true };
       case 'exit':
         this.audio.play('sniper-exit');
         this.ui.clearText(); 
@@ -378,7 +358,6 @@ private handleCommands(text: string): { capturedByCommand: boolean } {
         this.state.isLogging = true;
         this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
         return { capturedByCommand: true };
-
     default:
       if (this.state.isLogging) {
         this.sendToBackend(command);
@@ -387,19 +366,6 @@ private handleCommands(text: string): { capturedByCommand: boolean } {
     }
   }
 
-  private closeOpenedWindows() {
-    let closedCount = 0;
-    this.openedWindows.forEach(win => {
-      // Check if window object exists and isn't already closed manually
-      if (win && !win.closed) {
-        win.close();
-        closedCount++;
-      }
-    });
-    // Reset the array after closing
-    this.openedWindows = [];
-    console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
-  }
 
 
   private bindEvents() {
