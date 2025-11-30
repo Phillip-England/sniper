@@ -101,8 +101,8 @@ class UIManager {
   private outputContainer: HTMLDivElement;
   private placeholder: HTMLDivElement;
   private statusText: HTMLDivElement;
+  private copyBtn: HTMLButtonElement;
   private greenDot: HTMLDivElement;
-  private commandTimeout: number | null = null;
 
   private readonly defaultClasses = ['bg-red-600', 'hover:scale-105', 'hover:bg-red-500'];
   private readonly recordingClasses = ['bg-red-700', 'animate-pulse', 'ring-4', 'ring-red-900'];
@@ -114,10 +114,10 @@ class UIManager {
     this.outputContainer = document.getElementById('output-container') as HTMLDivElement;
     this.placeholder = document.getElementById('placeholder') as HTMLDivElement;
     this.statusText = document.getElementById('status-text') as HTMLDivElement;
+    this.copyBtn = this.outputContainer.querySelector('button') as HTMLButtonElement;
     this.greenDot = document.getElementById('green-dot') as HTMLDivElement;
 
-    this.transcriptEl.innerText = "";
-    this.interimEl.innerText = "";
+    this.setupCopyButton();
   }
 
   public getRecordButton(): HTMLButtonElement {
@@ -138,36 +138,60 @@ class UIManager {
       this.btn.classList.add(...this.recordingClasses);
       this.statusText.classList.remove('opacity-0');
       this.outputContainer.classList.remove('opacity-0', 'translate-y-10');
-      this.placeholder.textContent = "Listening for commands...";
-      this.placeholder.classList.remove('hidden');
+      this.placeholder.textContent = "Listening...";
     } else {
       this.btn.classList.remove(...this.recordingClasses);
       this.btn.classList.add(...this.defaultClasses);
       this.statusText.classList.add('opacity-0');
       this.placeholder.textContent = "Tap button to speak...";
-      this.placeholder.classList.remove('hidden');
-      this.transcriptEl.innerText = "";
+      this.togglePlaceholder();
     }
   }
 
-  public showCommand(command: string) {
-    this.placeholder.classList.add('hidden');
-    this.transcriptEl.innerText = `[ ${command.toUpperCase()} ]`;
-    
-    if (this.commandTimeout) {
-        window.clearTimeout(this.commandTimeout);
+  public updateText(final: string, interim: string, isLogging: boolean) {
+    if (isLogging) {
+        // CHANGED: We now overwrite the text instead of appending (+Refactor)
+        // This ensures only the most recent command is shown.
+        if (final) {
+            this.transcriptEl.innerText = final; 
+        }
+        this.interimEl.innerText = interim;
+    } else {
+      this.interimEl.innerText = '';
     }
-
-    this.commandTimeout = window.setTimeout(() => {
-        this.transcriptEl.innerText = "";
-        this.placeholder.classList.remove('hidden');
-    }, 2000);
+    this.togglePlaceholder();
   }
 
   public clearText() {
     this.transcriptEl.innerText = '';
     this.interimEl.innerText = '';
-    this.placeholder.classList.remove('hidden');
+    this.togglePlaceholder();
+  }
+
+  public getText(): string {
+    return this.transcriptEl.innerText;
+  }
+
+  private togglePlaceholder() {
+    if (this.transcriptEl.innerText || this.interimEl.innerText) {
+      this.placeholder.classList.add('hidden');
+    } else {
+      this.placeholder.classList.remove('hidden');
+    }
+  }
+
+  private setupCopyButton() {
+    if (!this.copyBtn) return;
+    this.copyBtn.onclick = null;
+    this.copyBtn.addEventListener('click', () => {
+      const text = this.transcriptEl.innerText;
+      if (text) {
+        navigator.clipboard.writeText(text);
+        const originalText = this.copyBtn.innerText;
+        this.copyBtn.innerText = "[ COPIED! ]";
+        setTimeout(() => this.copyBtn.innerText = originalText, 2000);
+      }
+    });
   }
 }
 
@@ -178,42 +202,18 @@ class SniperCore {
   private audio: AudioManager;
   private ui: UIManager;
   private recognition: SpeechRecognition | null = null;
-    
-  private lastActionCommand: string = '';
-    
-  // Deduplication & Throttling State
-  private previousProcessedToken: string = '';
-  private lastResultIndex: number = -1; 
-  private lastExecutionTime: number = 0;
-  private readonly THROTTLE_DELAY = 200; // 200ms constraint
+  
+  // Track the very last command executed for the 'repeat' functionality
+  private lastCommand: string = '';
+
+  // Array to track all windows opened by this session (search, visit, and open)
+  private openedWindows: Window[] = [];
+
 
   private state = {
     isRecording: false,
-    isLogging: true, // Defaults to ON
+    isLogging: true,
     shouldContinue: false
-  };
-
-  private numberMap: Record<string, string> = {
-    // English (For Repetition Logic)
-    "zero": "0", "one": "1", "won": "1", 
-    "two": "2", "to": "2", "too": "2",
-    "three": "3", "tree": "3",
-    "four": "4", "for": "4", 
-    "five": "5", 
-    "six": "6", 
-    "seven": "7", 
-    "eight": "8", "ate": "8",
-    "nine": "9", 
-    "ten": "10",
-    "eleven": "11", "twelve": "12", "thirteen": "13", 
-    "fourteen": "14", "fifteen": "15", "sixteen": "16", 
-    "seventeen": "17", "eighteen": "18", "nineteen": "19",
-    "twenty": "20", "thirty": "30", "forty": "40", 
-    "fifty": "50", "sixty": "60", "seventy": "70", 
-    "eighty": "80", "ninety": "90", "hundred": "100",
-    
-    // NOTE: Spanish removed from here so they are treated as commands
-    // and handled by the server to type literal numbers.
   };
 
   constructor(audio: AudioManager, ui: UIManager) {
@@ -221,11 +221,6 @@ class SniperCore {
     this.ui = ui;
     this.initializeSpeechEngine();
     this.bindEvents();
-  }
-
-  private preprocessNumber(input: string): string {
-    const cleanWord = input.toLowerCase().trim().replace(/[?!.,]/g, '');
-    return this.numberMap[cleanWord] || cleanWord;
   }
 
   private initializeSpeechEngine() {
@@ -268,71 +263,41 @@ class SniperCore {
     };
 
     this.recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // 1. New Phrase Detection
-      if (event.resultIndex !== this.lastResultIndex) {
-          this.lastResultIndex = event.resultIndex;
-          this.previousProcessedToken = '';
-      }
+      let finalChunk = '';
+      let interimChunk = '';
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
+          
         if (!result || !result.length) continue;
         const alternative = result[0];
         if (!alternative) continue;
-        
-        // 2. Strict Single Word Check
-        const transcript = alternative.transcript.trim();
-        
-        if (transcript.includes(' ')) {
-            continue;
+
+        // ========================================================
+        // >>> CONSOLE LOG ADDED HERE FOR IMMEDIATE FEEDBACK <<<
+        // ========================================================
+        console.log(`[RAW SPEECH DETECTED]: ${alternative.transcript} (Final: ${result.isFinal})`);
+
+        if (result.isFinal) {
+          finalChunk += alternative.transcript;
+        } else {
+          interimChunk += alternative.transcript;
         }
+      }
 
-        // 3. Process the Single Word
-        const processed = this.preprocessNumber(transcript);
+      if (finalChunk) {
+        // 1. Immediately update UI with the new command (replaces old command)
+        this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
         
-        const baseCommands = [
-            'number',
-            // Controls
-            'north', 'south', 'east', 'west', 'option', 'alt', 'command', 'control', 
-            'write', 'click', 'left', 'right', 'up', 'down', 'on', 'off', 'exit', 'again', 'release', 'shift',
-            'space', 'back', 'enter', 'tab', 'escape',
+        // 2. Process the command
+        const processed = this.handleCommands(finalChunk);
         
-
-            // Phonetic Alphabet
-            'alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 
-            'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec', 'romeo', 
-            'sierra', 'tango', 'uniform', 'victor', 'whiskey', 'xray', 'yankee', 'zulu',
-
-            // Symbols (Standard Keyboard)
-            'tilde', 'tick', 'bang', 'at', 'hash', 'dollar', 'percent', 'caret', 'peak', 'ampersand', 'star', 
-            'open', 'close', 'underscore', 'floor', 'plus', 'minus', 'equal', 
-            'brace', 'curly', 'lock', 'rcurly', 'bracket', 'rbracket', 'kit', 'pipe', 'bar', 'backslash', 
-            'colon', 'semicolon', 'quote', 'single', 'comma', 'tail', 'dot', 'question', 'slash', 
-            'less', 'greater', 'wave'
-        ];
-        
-        const isCommand = baseCommands.includes(processed);
-        const isNumber = /^\d+$/.test(processed);
-        
-        if (isCommand || isNumber) {
-            
-            // 4. Deduplication
-            if (processed !== this.previousProcessedToken) {
-                
-                // 5. Global Throttle Check
-                const now = Date.now();
-                if (now - this.lastExecutionTime > this.THROTTLE_DELAY) {
-                    
-                    this.previousProcessedToken = processed;
-                    this.lastExecutionTime = now;
-                    console.log(`[Sniper] Executing: ${processed}`);
-                    this.ui.showCommand(processed);
-                    this.handleCommands(processed);
-                } else {
-                    console.log(`[Sniper] Throttled: ${processed} (Limit 200ms)`);
-                }
-            }
+        // 3. Audio feedback if not a specific command
+        if (!processed.capturedByCommand && this.state.isLogging) {
+           this.audio.play('click');
         }
+      } else {
+        this.ui.updateText('', interimChunk, this.state.isLogging);
       }
     };
 
@@ -345,72 +310,97 @@ class SniperCore {
   }
 
   private async sendToBackend(command: string) {
-    // SECURITY: Block multi-word, empty strings, AND single letters
-    if (command.includes(' ') || command.trim().length === 0 || /^[a-z]$/.test(command)) {
-        console.warn(`[Sniper] Blocked invalid/letter: "${command}"`);
-        return;
-    }
-
-    this.audio.play('click');
     try {
-      fetch('http://localhost:8000/api/data', { 
+      console.log(`[Sniper] Sending to backend: ${command}`);
+      await fetch('http://localhost:8000/api/data', { 
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ command: command })
-      }).catch(e => console.error("Fetch error", e));
+      });
     } catch (err) {
-      console.warn('[Sniper] Backend connection failed.');
+      console.warn('[Sniper] Backend connection failed. Is localhost:8000 running?');
     }
   }
 
-  private handleCommands(text: string): void {
-    const command = text.toLowerCase().trim();
-
-    // --- RECURSIVE 'AGAIN' LOGIC ---
+private handleCommands(text: string): { capturedByCommand: boolean } {
+    const command = text.toLowerCase().trim().replace(/[?!]/g, ''); 
+      
+    // --- SPECIAL REPEAT LOGIC ---
     if (command === 'again') {
-        if (this.lastActionCommand) {
-            this.handleCommands(this.lastActionCommand);
-            return;
+        if (this.lastCommand) {
+            console.log(`Repeating command: ${this.lastCommand}`);
+            return this.handleCommands(this.lastCommand);
+        } else {
+            return { capturedByCommand: true };
         }
     }
 
-    // --- REMEMBER LAST COMMAND (Skip logic keywords) ---
-    // Note: Single letters will now be blocked before reaching here or blocked by sendToBackend
-    if (!/^\d+$/.test(command) && command !== 'again' && command !== 'on' && command !== 'off') {
-        this.lastActionCommand = command;
+    if (command) {
+        this.lastCommand = command;
     }
+      
+    // --- STATIC COMMANDS ---
+    switch (command.replace(/[.,]/g, '')) { 
+      // ... existing cases ...
 
-    // --- STATIC CLIENT-SIDE COMMANDS ---
-    switch (command) {
-        case 'exit':
-            this.audio.play('sniper-exit');
-            this.ui.clearText(); 
-            this.state.shouldContinue = false;
-            this.stop();
-            return; // Stop here, don't send to backend
+      case 'help history':
+        this.audio.play('click');
+        window.open('http://localhost:3000/history', '_blank');
+        return { capturedByCommand: true };
 
-        case 'off':
-            this.audio.play('sniper-off');
-            this.ui.clearText(); 
-            this.state.isLogging = false; // Disable backend sending
-            this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-            return;
+      case 'help scripts':
+        this.audio.play('click');
+        window.open('http://localhost:3000/scripts', '_blank');
+        return { capturedByCommand: true };
 
-        case 'on':
-            this.audio.play('sniper-on');
-            this.state.isLogging = true; // Enable backend sending
-            this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-            return;
-    }
-        
-    // --- SERVER-SIDE COMMANDS ---
-    // Only send if logging is ENABLED
-    if (this.state.isLogging) {
+      case 'help shortcuts':
+        this.audio.play('click');
+        window.open('http://localhost:3000/shortcuts', '_blank');
+        return { capturedByCommand: true };
+      case 'exit':
+        this.audio.play('sniper-exit');
+        this.ui.clearText(); 
+        this.state.shouldContinue = false;
+        this.stop();
+        return { capturedByCommand: true };
+       
+      case 'off':
+        this.audio.play('sniper-off');
+        this.ui.clearText(); 
+        this.state.isLogging = false;
+        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
+        return { capturedByCommand: true };
+
+      case 'on':
+        this.audio.play('sniper-on');
+        this.state.isLogging = true;
+        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
+        return { capturedByCommand: true };
+
+    default:
+      if (this.state.isLogging) {
         this.sendToBackend(command);
-    } else {
-        console.log(`[Sniper] Ignored "${command}" (System is OFF)`);
+      }
+      return { capturedByCommand: false };
     }
   }
+
+  private closeOpenedWindows() {
+    let closedCount = 0;
+    this.openedWindows.forEach(win => {
+      // Check if window object exists and isn't already closed manually
+      if (win && !win.closed) {
+        win.close();
+        closedCount++;
+      }
+    });
+    // Reset the array after closing
+    this.openedWindows = [];
+    console.log(`Sniper Simplified: Closed ${closedCount} tabs.`);
+  }
+
 
   private bindEvents() {
     const btn = this.ui.getRecordButton();

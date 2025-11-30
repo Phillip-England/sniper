@@ -16,12 +16,24 @@ import (
 	"github.com/go-vgo/robotgo"
 )
 
+
+const (
+	CmdTypeAction   string = "ACTION"
+	CmdTypeModifier string = "MODIFIER"
+)
+
+type Cmd interface {
+	Type() string
+	Name() string
+	Action() error
+}
+
 // --- CONFIGURATION ---
 
 const (
 	ClientPort    = "3000"
 	ServerPort    = "8000"
-	ThrottleMs    = 200
+	// ThrottleMs removed
 	MouseDistance = 50
 	HistoryFile   = "history.json"
 )
@@ -149,7 +161,7 @@ func init() {
 
 type SessionState struct {
 	mu                sync.Mutex
-	lastSuccessTime   time.Time
+	// lastSuccessTime removed
 	pendingModifiers  []string
 	lastVerb          string
 	numberAccumulator string
@@ -162,15 +174,7 @@ func NewSessionState() *SessionState {
 	}
 }
 
-func (s *SessionState) CheckThrottle() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if time.Since(s.lastSuccessTime) < time.Duration(ThrottleMs)*time.Millisecond {
-		return true
-	}
-	s.lastSuccessTime = time.Now()
-	return false
-}
+// CheckThrottle method removed entirely
 
 // --- CORE ENGINE ---
 
@@ -188,36 +192,68 @@ func NewSniperEngine(hist *HistoryManager, exec ActionExecutor) *SniperEngine {
 	}
 }
 
+// ProcessInput acts as the controller that splits multi-word commands
+// and processes them sequentially.
 func (e *SniperEngine) ProcessInput(rawInput string) (bool, string) {
-	if e.state.CheckThrottle() {
-		return false, "throttle"
-	}
+	// Throttle check removed
 
 	cleanedInput := e.cleanInput(rawInput)
 	if cleanedInput == "" {
 		return false, "empty"
 	}
 
-	// 1. History Lookup
+	// 1. History Lookup (Expand the macro if it exists)
+	// e.g., if "eagle" -> "alpha bravo", we want to process "alpha bravo"
 	if historicCmd, found := e.history.FindCommand(cleanedInput); found {
 		fmt.Printf("[History] Trigger '%s' -> Executing '%s'\n", cleanedInput, historicCmd)
 		cleanedInput = historicCmd
 	}
 
+	// 2. Split into words
+	words := strings.Fields(cleanedInput)
+	if len(words) == 0 {
+		return false, "empty"
+	}
+
+	// 3. Iterate and Process
 	e.state.mu.Lock()
 	defer e.state.mu.Unlock()
 
-	// 2. Identify Type: Digit or Command
-	digitStr, isNumber := e.getDigitString(cleanedInput)
+	overallSuccess := false
+	lastReason := ""
 
-	if isNumber {
-		return e.handleDigitSequence(digitStr, cleanedInput)
+	for _, word := range words {
+		success, reason := e.processOneWord(word)
+		if success {
+			overallSuccess = true
+		} else {
+			lastReason = reason
+		}
 	}
 
-	return e.handleCommand(cleanedInput)
+	// 4. Update History
+	// We push the FULL expanded command line to history if at least one part succeeded
+	if overallSuccess {
+		e.history.Push(cleanedInput)
+		return true, ""
+	}
+
+	return false, lastReason
 }
 
-func (e *SniperEngine) handleDigitSequence(digitStr, originalInput string) (bool, string) {
+// processOneWord handles a single token (e.g., "alpha" or "five" or "down")
+func (e *SniperEngine) processOneWord(word string) (bool, string) {
+	// Identify Type: Digit or Command
+	digitStr, isNumber := e.getDigitString(word)
+
+	if isNumber {
+		return e.handleDigitSequence(digitStr)
+	}
+
+	return e.handleCommand(word)
+}
+
+func (e *SniperEngine) handleDigitSequence(digitStr string) (bool, string) {
 	if e.state.lastVerb == "" {
 		return false, "no_context"
 	}
@@ -225,8 +261,6 @@ func (e *SniperEngine) handleDigitSequence(digitStr, originalInput string) (bool
 	// MODE: Typing Numbers (e.g., "number five")
 	if e.state.lastVerb == "number" {
 		e.executor.TypeStr(digitStr)
-		// We don't accumulate or limit here; we just type what we hear
-		e.history.Push(originalInput)
 		return true, ""
 	}
 
@@ -242,15 +276,11 @@ func (e *SniperEngine) handleDigitSequence(digitStr, originalInput string) (bool
 	if delta > 0 {
 		e.executeActionLocked(e.state.lastVerb, delta)
 		e.state.executedCount += delta
-		e.history.Push(originalInput)
 	}
 	return true, ""
 }
 
-func (e *SniperEngine) handleCommand(input string) (bool, string) {
-	words := strings.Fields(input)
-	command := words[len(words)-1]
-
+func (e *SniperEngine) handleCommand(command string) (bool, string) {
 	if !validCommands[command] {
 		return false, "invalid"
 	}
@@ -261,7 +291,6 @@ func (e *SniperEngine) handleCommand(input string) (bool, string) {
 	e.state.executedCount = 1
 
 	e.executeActionLocked(command, 1)
-	e.history.Push(input)
 
 	return true, ""
 }
@@ -424,18 +453,13 @@ func (e *SniperEngine) cleanInput(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func (e *SniperEngine) getDigitString(input string) (string, bool) {
-	words := strings.Fields(input)
-	if len(words) == 0 {
-		return "", false
-	}
-	lastWord := words[len(words)-1]
-
-	if val, ok := digitMap[lastWord]; ok {
+func (e *SniperEngine) getDigitString(word string) (string, bool) {
+	// Previously split input, now takes a single word
+	if val, ok := digitMap[word]; ok {
 		return val, true
 	}
-	if _, err := strconv.Atoi(lastWord); err == nil {
-		return lastWord, true
+	if _, err := strconv.Atoi(word); err == nil {
+		return word, true
 	}
 	return "", false
 }
@@ -603,11 +627,8 @@ func runServerSide(engine *SniperEngine) error {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"status":"executed"}`))
 		} else {
-			if reason == "throttle" {
-				http.Error(w, "Throttled", http.StatusTooManyRequests)
-			} else {
-				http.Error(w, "Invalid Command: "+reason, http.StatusBadRequest)
-			}
+			// Throttle check removed here
+			http.Error(w, "Invalid Command: "+reason, http.StatusBadRequest)
 		}
 	})
 	return app.Serve(ServerPort)
