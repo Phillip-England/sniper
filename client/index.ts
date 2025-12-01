@@ -372,8 +372,11 @@ private handleCommands(text: string): { capturedByCommand: boolean } {
     const btn = this.ui.getRecordButton();
     if (btn) {
       btn.addEventListener('click', () => {
-        if (this.state.isRecording) this.stop();
-        else this.start();
+        if (this.state.isRecording) {
+          this.stop();
+        } else {
+          this.start();
+        }
       });
     }
   }

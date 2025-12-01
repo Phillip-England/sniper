@@ -256,10 +256,11 @@ class SniperCore {
     const btn = this.ui.getRecordButton();
     if (btn) {
       btn.addEventListener("click", () => {
-        if (this.state.isRecording)
+        if (this.state.isRecording) {
           this.stop();
-        else
+        } else {
           this.start();
+        }
       });
     }
   }

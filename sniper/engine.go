@@ -147,6 +147,9 @@ func (e *Engine) Execute() error {
 	// Parse wasn't called immediately before.
 
 	for i, token := range e.Tokens {
+		if !e.IsOperating {
+			break
+		}
 		// Update the internal state (tracking slices, remaining words string)
 		// before we execute the logic for this token.
 		e.UpdateInternalState(i, token)
@@ -161,6 +164,7 @@ func (e *Engine) Execute() error {
 		}
 	}
 
+	e.IsOperating = true
 	return nil
 }
 
