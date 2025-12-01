@@ -1,5 +1,7 @@
 package sniper
 
+import "time"
+
 // EffectFunc is the signature for an effect (middleware).
 // It takes the Engine and a 'next' function which represents the next link in the chain.
 type EffectFunc func(e *Engine, next func() error) error
@@ -25,4 +27,45 @@ func EffectChain(e *Engine, handler func() error, effects ...EffectFunc) error {
 
 	// Execute the outermost function
 	return next()
+}
+
+// WaitBefore returns an EffectFunc that sleeps for the specified milliseconds
+// BEFORE executing the next function in the chain.
+func WaitBefore(ms int) EffectFunc {
+	return func(e *Engine, next func() error) error {
+		time.Sleep(time.Duration(ms) * time.Millisecond)
+		return next()
+	}
+}
+
+// WaitAfter returns an EffectFunc that executes the next function in the chain,
+// and then sleeps for the specified milliseconds AFTER it completes.
+func WaitAfter(ms int) EffectFunc {
+	return func(e *Engine, next func() error) error {
+		// Execute the action first
+		err := next()
+		if err != nil {
+			return err
+		}
+
+		// If successful, wait the specified duration
+		time.Sleep(time.Duration(ms) * time.Millisecond)
+		return nil
+	}
+}
+
+// KillAfter returns an EffectFunc that sets the Engine.IsOperating flag to false
+// AFTER the command executes successfully.
+func KillAfter() EffectFunc {
+	return func(e *Engine, next func() error) error {
+		// Execute the action first
+		err := next()
+		if err != nil {
+			return err
+		}
+
+		// Change IsOperating to false to stop the engine
+		e.IsOperating = false
+		return nil
+	}
 }

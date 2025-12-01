@@ -9,10 +9,9 @@ import (
 
 // Mouse represents the state of the mouse cursor.
 type Mouse struct {
-	X     int
-	Y     int
-	Jump  int // Determines how far the mouse moves on directional commands
-	Delay time.Duration
+	X    int
+	Y    int
+	Jump int // Determines how far the mouse moves on directional commands
 }
 
 // NewMouse initializes a new Mouse struct with the current screen position
@@ -20,10 +19,9 @@ type Mouse struct {
 func NewMouse() *Mouse {
 	x, y := robotgo.Location()
 	return &Mouse{
-		X:     x,
-		Y:     y,
-		Jump:  1, // Default jump distance in pixels
-		Delay: time.Microsecond * 1,
+		X:    x,
+		Y:    y,
+		Jump: 1, // Default jump distance in pixels
 	}
 }
 
@@ -54,7 +52,6 @@ func (m *Mouse) MoveLeft() {
 
 	m.X = targetX
 	robotgo.Move(m.X, m.Y)
-	time.Sleep(m.Delay)
 }
 
 // MoveRight moves the mouse right by the current Jump amount, stopping at the screen width.
@@ -72,7 +69,6 @@ func (m *Mouse) MoveRight() {
 
 	m.X = targetX
 	robotgo.Move(m.X, m.Y)
-	time.Sleep(m.Delay)
 }
 
 // MoveUp moves the mouse up by the current Jump amount, stopping at the top edge (0).
@@ -88,7 +84,6 @@ func (m *Mouse) MoveUp() {
 
 	m.Y = targetY
 	robotgo.Move(m.X, m.Y)
-	time.Sleep(m.Delay)
 }
 
 // MoveDown moves the mouse down by the current Jump amount, stopping at the screen height.
@@ -106,7 +101,6 @@ func (m *Mouse) MoveDown() {
 
 	m.Y = targetY
 	robotgo.Move(m.X, m.Y)
-	time.Sleep(m.Delay)
 }
 
 // --- Click Methods ---
@@ -119,16 +113,16 @@ func (m *Mouse) Click() {
 // DoubleClick performs two left clicks with a small delay.
 func (m *Mouse) DoubleClick() {
 	robotgo.Click("left")
-	time.Sleep(m.Delay)
+	time.Sleep(time.Millisecond * 50)
 	robotgo.Click("left")
 }
 
 // TripleClick performs three left clicks.
 func (m *Mouse) TripleClick() {
 	robotgo.Click("left")
-	time.Sleep(m.Delay)
+	time.Sleep(time.Millisecond * 50)
 	robotgo.Click("left")
-	time.Sleep(m.Delay)
+	time.Sleep(time.Millisecond * 50)
 	robotgo.Click("left")
 }
 
@@ -142,7 +136,7 @@ func (m *Mouse) ScrollDown(amount int) {
 	for i := 0; i < steps; i++ {
 		// x=0, y=-1 (Usually down on standard OS configs)
 		robotgo.Scroll(0, -1)
-		time.Sleep(m.Delay)
+		time.Sleep(time.Millisecond * 50)
 	}
 }
 
@@ -154,7 +148,7 @@ func (m *Mouse) ScrollUp(amount int) {
 	for i := 0; i < steps; i++ {
 		// x=0, y=1 (Usually up)
 		robotgo.Scroll(0, 1)
-		time.Sleep(m.Delay)
+		time.Sleep(time.Millisecond * 50)
 	}
 }
 
@@ -167,7 +161,7 @@ func (m *Mouse) ScrollLeft(amount int) {
 		// x=1, y=0 (Positive X is usually left in robotgo depending on OS)
 		// If this scrolls right instead, switch to -1
 		robotgo.Scroll(1, 0)
-		time.Sleep(m.Delay)
+		time.Sleep(time.Millisecond * 50)
 	}
 }
 
@@ -180,6 +174,6 @@ func (m *Mouse) ScrollRight(amount int) {
 		// x=-1, y=0 (Negative X is usually right in robotgo depending on OS)
 		// If this scrolls left instead, switch to 1
 		robotgo.Scroll(-1, 0)
-		time.Sleep(m.Delay)
+		time.Sleep(time.Millisecond * 50)
 	}
 }

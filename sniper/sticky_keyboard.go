@@ -30,7 +30,7 @@ type StickyKeyboard struct {
 func NewStickyKeyboard() *StickyKeyboard {
 	return &StickyKeyboard{
 		pendingModifiers: make([]string, 0),
-		PostReleaseDelay: 50 * time.Millisecond, // Adjustable delay
+		PostReleaseDelay: 5 * time.Millisecond, // Adjustable delay
 	}
 }
 
@@ -226,6 +226,29 @@ func (k *StickyKeyboard) SnakeCase(phrase string) {
 		words[i] = strings.ToLower(w)
 	}
 	k.TypeStr(strings.Join(words, "_"))
+}
+
+// Sentence types the words like a standard sentence (e.g., "Hello world")
+func (k *StickyKeyboard) Sentence(phrase string) error {
+	if len(phrase) == 0 {
+		return nil
+	}
+
+	phrase += ". "
+	// Capitalize the very first letter of the sentence
+	runes := []rune(phrase)
+	if len(runes) > 0 {
+		runes[0] = unicode.ToUpper(runes[0])
+	}
+
+	return k.Type(string(runes))
+}
+
+// Type uses robotgo to type the final formatted string string.
+func (k *StickyKeyboard) Type(text string) error {
+	// Robotgo does not return an error, so we wrap it.
+	robotgo.TypeStr(text)
+	return nil
 }
 
 // --- Function Keys ---

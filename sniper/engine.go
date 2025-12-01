@@ -33,12 +33,6 @@ type Engine struct {
 	// It is updated prior to token handling so commands can see what text remains.
 	RemainingRawWords string
 
-	// NextPhrase holds a string of consecutive Raw tokens immediately following the current token.
-	// It is calculated prior to token handling.
-	// Example: If tokens are [CMD] [RAW] [RAW] [NUMBER], while handling [CMD], NextPhrase is "raw raw".
-	// If the next token is not Raw, NextPhrase is "".
-	NextPhrase string
-
 	// TokenIndices maps the index of the Token in the Tokens slice
 	// to its original index in the RawWords slice.
 	TokenIndices []int
@@ -74,11 +68,10 @@ func NewEngine() *Engine {
 		RemainingTokens:    make([]Token, 0),
 		HandledTokens:      make([]Token, 0),
 		RemainingRawWords:  "",
-		NextPhrase:         "", // Explicit initialization
 		TokenIndices:       make([]int, 0),
 		RawWords:           make([]string, 0),
 		Mouse:              NewMouse(),
-		Delay:              time.Microsecond * 100,
+		Delay:              time.Microsecond * 800,
 		LastCmd:            nil,   // Explicit initialization
 		FirstCmdIsValid:    false, // Explicit initialization
 		IsOperating:        true,  // Defaults to true so the engine runs
@@ -154,49 +147,11 @@ func (e *Engine) Execute() error {
 	// Parse wasn't called immediately before.
 
 	for i, token := range e.Tokens {
-		// STATE UPDATE:
-		// We update remaining words and phrase data before handling tokens so the
-		// current token logic can access the future string state if needed.
+		// Update the internal state (tracking slices, remaining words string)
+		// before we execute the logic for this token.
+		e.UpdateInternalState(i, token)
 
-		// 1. Update RemainingRawWords
-		// We want the words AFTER the current one.
-		// If this is the last token, the remaining string is empty.
-		if i+1 < len(e.RawWords) {
-			e.RemainingRawWords = strings.Join(e.RawWords[i+1:], " ")
-		} else {
-			e.RemainingRawWords = ""
-		}
-
-		// 2. Update NextPhrase
-		// We look ahead to see if the *immediate* next token is Raw.
-		// If so, we collect it and any subsequent Raw tokens.
-		e.NextPhrase = "" // Reset for current iteration
-		if i+1 < len(e.Tokens) {
-			// Check if the very next token is Raw
-			if e.Tokens[i+1].Type() == TokenTypeRaw {
-				var rawParts []string
-				// Iterate forward starting from the next token
-				for j := i + 1; j < len(e.Tokens); j++ {
-					if e.Tokens[j].Type() == TokenTypeRaw {
-						rawParts = append(rawParts, e.Tokens[j].Literal())
-					} else {
-						// We hit a Cmd or Number; stop collecting the phrase
-						break
-					}
-				}
-				e.NextPhrase = strings.Join(rawParts, " ")
-			}
-		}
-
-		// 3. Add to Handled list
-		e.HandledTokens = append(e.HandledTokens, token)
-
-		// 4. Remove from Remaining list (pop from front)
-		if len(e.RemainingTokens) > 0 {
-			e.RemainingTokens = e.RemainingTokens[1:]
-		}
-
-		// 5. Execute logic
+		// Execute logic
 		stop, err := token.Handle(e, i)
 		if err != nil {
 			return err
@@ -207,4 +162,25 @@ func (e *Engine) Execute() error {
 	}
 
 	return nil
+}
+
+// UpdateInternalState handles the maintenance of the tracking slices and strings
+// (RemainingRawWords, HandledTokens, RemainingTokens) prior to a token's execution.
+func (e *Engine) UpdateInternalState(i int, token Token) {
+	// 1. Update RemainingRawWords
+	// We want the words AFTER the current one.
+	// If this is the last token, the remaining string is empty.
+	if i+1 < len(e.RawWords) {
+		e.RemainingRawWords = strings.Join(e.RawWords[i+1:], " ")
+	} else {
+		e.RemainingRawWords = ""
+	}
+
+	// 2. Add to Handled list
+	e.HandledTokens = append(e.HandledTokens, token)
+
+	// 3. Remove from Remaining list (pop from front)
+	if len(e.RemainingTokens) > 0 {
+		e.RemainingTokens = e.RemainingTokens[1:]
+	}
 }

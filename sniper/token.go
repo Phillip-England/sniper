@@ -2,7 +2,6 @@ package sniper
 
 import (
 	"strconv"
-	"strings"
 )
 
 // TokenType identifies the category of a token.
@@ -63,18 +62,6 @@ func (t *CmdToken) Literal() string { return t.literal }
 func (t *CmdToken) Command() Cmd    { return t.cmd }
 
 func (t *CmdToken) Handle(e *Engine, index int) (bool, error) {
-	// Check for "Isolated" mode (like "phrase hello world")
-	if t.cmd.Mode() == ModeIsolated {
-		payload := ""
-		// Join everything remaining in RawWords as the payload
-		// We use the Engine's RawWords to look ahead
-		if index+1 < len(e.RawWords) {
-			payload = strings.Join(e.RawWords[index+1:], " ")
-		}
-		// Execute and return immediately (consumes rest of input)
-		return true, t.cmd.Action(e, payload)
-	}
-
 	// Execute the standard command once
 	if err := t.cmd.Action(e, ""); err != nil {
 		return false, err

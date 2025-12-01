@@ -8,26 +8,12 @@ type Cmd interface {
 	// CalledBy returns the slice of strings that trigger the command.
 	CalledBy() []string
 
-	// Mode tells the engine if this is Sequential or Isolated
-	Mode() ExecutionMode
-
 	// Effects returns a list of middleware to run for this command.
 	Effects() []EffectFunc
 
 	// Action contains the actual business logic to perform.
 	Action(e *Engine, phrase string) error
 }
-
-// ExecutionMode defines how the engine handles the command queue
-type ExecutionMode int
-
-const (
-	// ModeSequential: The command joins the queue and waits its turn.
-	ModeSequential ExecutionMode = iota
-
-	// ModeIsolated: The command pauses or clears the queue and runs alone.
-	ModeIsolated
-)
 
 // ----------------------------------------------------------------------------
 // MODIFIERS
@@ -37,7 +23,6 @@ type Shift struct{}
 
 func (Shift) Name() string          { return "shift" }
 func (Shift) CalledBy() []string    { return []string{"shift"} }
-func (Shift) Mode() ExecutionMode   { return ModeSequential }
 func (Shift) Effects() []EffectFunc { return nil }
 func (c Shift) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -50,7 +35,6 @@ type Control struct{}
 
 func (Control) Name() string          { return "control" }
 func (Control) CalledBy() []string    { return []string{"control"} }
-func (Control) Mode() ExecutionMode   { return ModeSequential }
 func (Control) Effects() []EffectFunc { return nil }
 func (c Control) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -63,7 +47,6 @@ type Alt struct{}
 
 func (Alt) Name() string          { return "alt" }
 func (Alt) CalledBy() []string    { return []string{"alt"} }
-func (Alt) Mode() ExecutionMode   { return ModeSequential }
 func (Alt) Effects() []EffectFunc { return nil }
 func (c Alt) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -76,7 +59,6 @@ type Command struct{}
 
 func (Command) Name() string          { return "command" }
 func (Command) CalledBy() []string    { return []string{"command"} }
-func (Command) Mode() ExecutionMode   { return ModeSequential }
 func (Command) Effects() []EffectFunc { return nil }
 func (c Command) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -93,7 +75,6 @@ type North struct{} // Up
 
 func (North) Name() string          { return "north" }
 func (North) CalledBy() []string    { return []string{"north"} }
-func (North) Mode() ExecutionMode   { return ModeSequential }
 func (North) Effects() []EffectFunc { return nil }
 func (c North) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -106,7 +87,6 @@ type South struct{} // Down
 
 func (South) Name() string          { return "south" }
 func (South) CalledBy() []string    { return []string{"south"} }
-func (South) Mode() ExecutionMode   { return ModeSequential }
 func (South) Effects() []EffectFunc { return nil }
 func (c South) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -119,7 +99,6 @@ type East struct{} // Right
 
 func (East) Name() string          { return "east" }
 func (East) CalledBy() []string    { return []string{"east"} }
-func (East) Mode() ExecutionMode   { return ModeSequential }
 func (East) Effects() []EffectFunc { return nil }
 func (c East) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -132,7 +111,6 @@ type West struct{} // Left
 
 func (West) Name() string          { return "west" }
 func (West) CalledBy() []string    { return []string{"west"} }
-func (West) Mode() ExecutionMode   { return ModeSequential }
 func (West) Effects() []EffectFunc { return nil }
 func (c West) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -149,7 +127,6 @@ type Enter struct{}
 
 func (Enter) Name() string          { return "enter" }
 func (Enter) CalledBy() []string    { return []string{"enter"} }
-func (Enter) Mode() ExecutionMode   { return ModeSequential }
 func (Enter) Effects() []EffectFunc { return nil }
 func (c Enter) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -162,7 +139,6 @@ type Tab struct{}
 
 func (Tab) Name() string          { return "tab" }
 func (Tab) CalledBy() []string    { return []string{"tab"} }
-func (Tab) Mode() ExecutionMode   { return ModeSequential }
 func (Tab) Effects() []EffectFunc { return nil }
 func (c Tab) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -175,7 +151,6 @@ type Space struct{}
 
 func (Space) Name() string          { return "space" }
 func (Space) CalledBy() []string    { return []string{"space"} }
-func (Space) Mode() ExecutionMode   { return ModeSequential }
 func (Space) Effects() []EffectFunc { return nil }
 func (c Space) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -188,7 +163,6 @@ type Back struct{} // Backspace
 
 func (Back) Name() string          { return "back" }
 func (Back) CalledBy() []string    { return []string{"back"} }
-func (Back) Mode() ExecutionMode   { return ModeSequential }
 func (Back) Effects() []EffectFunc { return nil }
 func (c Back) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -201,7 +175,6 @@ type Delete struct{}
 
 func (Delete) Name() string          { return "delete" }
 func (Delete) CalledBy() []string    { return []string{"delete"} }
-func (Delete) Mode() ExecutionMode   { return ModeSequential }
 func (Delete) Effects() []EffectFunc { return nil }
 func (c Delete) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -214,7 +187,6 @@ type Escape struct{}
 
 func (Escape) Name() string          { return "escape" }
 func (Escape) CalledBy() []string    { return []string{"escape"} }
-func (Escape) Mode() ExecutionMode   { return ModeSequential }
 func (Escape) Effects() []EffectFunc { return nil }
 func (c Escape) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -227,7 +199,6 @@ type Home struct{}
 
 func (Home) Name() string          { return "home" }
 func (Home) CalledBy() []string    { return []string{"home"} }
-func (Home) Mode() ExecutionMode   { return ModeSequential }
 func (Home) Effects() []EffectFunc { return nil }
 func (c Home) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -240,7 +211,6 @@ type End struct{}
 
 func (End) Name() string          { return "end" }
 func (End) CalledBy() []string    { return []string{"end"} }
-func (End) Mode() ExecutionMode   { return ModeSequential }
 func (End) Effects() []EffectFunc { return nil }
 func (c End) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -253,7 +223,6 @@ type PageUp struct{}
 
 func (PageUp) Name() string          { return "page_up" }
 func (PageUp) CalledBy() []string    { return []string{"page_up"} }
-func (PageUp) Mode() ExecutionMode   { return ModeSequential }
 func (PageUp) Effects() []EffectFunc { return nil }
 func (c PageUp) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -266,7 +235,6 @@ type PageDown struct{}
 
 func (PageDown) Name() string          { return "page_down" }
 func (PageDown) CalledBy() []string    { return []string{"page_down"} }
-func (PageDown) Mode() ExecutionMode   { return ModeSequential }
 func (PageDown) Effects() []EffectFunc { return nil }
 func (c PageDown) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -283,7 +251,6 @@ type Dot struct{} // .
 
 func (Dot) Name() string          { return "dot" }
 func (Dot) CalledBy() []string    { return []string{"dot"} }
-func (Dot) Mode() ExecutionMode   { return ModeSequential }
 func (Dot) Effects() []EffectFunc { return nil }
 func (c Dot) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -296,7 +263,6 @@ type Comma struct{} // ,
 
 func (Comma) Name() string          { return "comma" }
 func (Comma) CalledBy() []string    { return []string{"comma"} }
-func (Comma) Mode() ExecutionMode   { return ModeSequential }
 func (Comma) Effects() []EffectFunc { return nil }
 func (c Comma) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -309,7 +275,6 @@ type Slash struct{} // /
 
 func (Slash) Name() string          { return "slash" }
 func (Slash) CalledBy() []string    { return []string{"slash"} }
-func (Slash) Mode() ExecutionMode   { return ModeSequential }
 func (Slash) Effects() []EffectFunc { return nil }
 func (c Slash) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -322,7 +287,6 @@ type Backslash struct{} // \
 
 func (Backslash) Name() string          { return "backslash" }
 func (Backslash) CalledBy() []string    { return []string{"backslash"} }
-func (Backslash) Mode() ExecutionMode   { return ModeSequential }
 func (Backslash) Effects() []EffectFunc { return nil }
 func (c Backslash) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -335,7 +299,6 @@ type Semi struct{} // ;
 
 func (Semi) Name() string          { return "semi" }
 func (Semi) CalledBy() []string    { return []string{"semi"} }
-func (Semi) Mode() ExecutionMode   { return ModeSequential }
 func (Semi) Effects() []EffectFunc { return nil }
 func (c Semi) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -348,7 +311,6 @@ type Quote struct{} // '
 
 func (Quote) Name() string          { return "quote" }
 func (Quote) CalledBy() []string    { return []string{"quote"} }
-func (Quote) Mode() ExecutionMode   { return ModeSequential }
 func (Quote) Effects() []EffectFunc { return nil }
 func (c Quote) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -361,7 +323,6 @@ type Bracket struct{} // [
 
 func (Bracket) Name() string          { return "bracket" }
 func (Bracket) CalledBy() []string    { return []string{"bracket"} }
-func (Bracket) Mode() ExecutionMode   { return ModeSequential }
 func (Bracket) Effects() []EffectFunc { return nil }
 func (c Bracket) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -374,7 +335,6 @@ type Closing struct{} // ]
 
 func (Closing) Name() string          { return "closing" }
 func (Closing) CalledBy() []string    { return []string{"closing"} }
-func (Closing) Mode() ExecutionMode   { return ModeSequential }
 func (Closing) Effects() []EffectFunc { return nil }
 func (c Closing) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -387,7 +347,6 @@ type Dash struct{} // -
 
 func (Dash) Name() string          { return "dash" }
 func (Dash) CalledBy() []string    { return []string{"hyphen"} }
-func (Dash) Mode() ExecutionMode   { return ModeSequential }
 func (Dash) Effects() []EffectFunc { return nil }
 func (c Dash) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -400,7 +359,6 @@ type Equals struct{} // =
 
 func (Equals) Name() string          { return "equals" }
 func (Equals) CalledBy() []string    { return []string{"equals"} }
-func (Equals) Mode() ExecutionMode   { return ModeSequential }
 func (Equals) Effects() []EffectFunc { return nil }
 func (c Equals) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -413,7 +371,6 @@ type Tick struct{} // `
 
 func (Tick) Name() string          { return "tick" }
 func (Tick) CalledBy() []string    { return []string{"tick"} }
-func (Tick) Mode() ExecutionMode   { return ModeSequential }
 func (Tick) Effects() []EffectFunc { return nil }
 func (c Tick) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -429,8 +386,7 @@ func (c Tick) Action(e *Engine, p string) error {
 type A struct{}
 
 func (A) Name() string          { return "a" }
-func (A) CalledBy() []string    { return []string{"alpha"} }
-func (A) Mode() ExecutionMode   { return ModeSequential }
+func (A) CalledBy() []string    { return []string{"alpha", "a"} }
 func (A) Effects() []EffectFunc { return nil }
 func (c A) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -442,8 +398,7 @@ func (c A) Action(e *Engine, p string) error {
 type B struct{}
 
 func (B) Name() string          { return "b" }
-func (B) CalledBy() []string    { return []string{"bravo"} }
-func (B) Mode() ExecutionMode   { return ModeSequential }
+func (B) CalledBy() []string    { return []string{"bravo", "b"} }
 func (B) Effects() []EffectFunc { return nil }
 func (c B) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -455,8 +410,7 @@ func (c B) Action(e *Engine, p string) error {
 type C struct{}
 
 func (C) Name() string          { return "c" }
-func (C) CalledBy() []string    { return []string{"charlie"} }
-func (C) Mode() ExecutionMode   { return ModeSequential }
+func (C) CalledBy() []string    { return []string{"charlie", "c"} }
 func (C) Effects() []EffectFunc { return nil }
 func (c C) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -468,8 +422,7 @@ func (c C) Action(e *Engine, p string) error {
 type D struct{}
 
 func (D) Name() string          { return "d" }
-func (D) CalledBy() []string    { return []string{"delta"} }
-func (D) Mode() ExecutionMode   { return ModeSequential }
+func (D) CalledBy() []string    { return []string{"delta", "d"} }
 func (D) Effects() []EffectFunc { return nil }
 func (c D) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -481,8 +434,7 @@ func (c D) Action(e *Engine, p string) error {
 type E struct{}
 
 func (E) Name() string          { return "e" }
-func (E) CalledBy() []string    { return []string{"echo"} }
-func (E) Mode() ExecutionMode   { return ModeSequential }
+func (E) CalledBy() []string    { return []string{"echo", "e"} }
 func (E) Effects() []EffectFunc { return nil }
 func (c E) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -494,8 +446,7 @@ func (c E) Action(e *Engine, p string) error {
 type F struct{}
 
 func (F) Name() string          { return "f" }
-func (F) CalledBy() []string    { return []string{"foxtrot"} }
-func (F) Mode() ExecutionMode   { return ModeSequential }
+func (F) CalledBy() []string    { return []string{"foxtrot", "f"} }
 func (F) Effects() []EffectFunc { return nil }
 func (c F) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -507,8 +458,7 @@ func (c F) Action(e *Engine, p string) error {
 type G struct{}
 
 func (G) Name() string          { return "g" }
-func (G) CalledBy() []string    { return []string{"golf"} }
-func (G) Mode() ExecutionMode   { return ModeSequential }
+func (G) CalledBy() []string    { return []string{"golf", "g"} }
 func (G) Effects() []EffectFunc { return nil }
 func (c G) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -520,8 +470,7 @@ func (c G) Action(e *Engine, p string) error {
 type H struct{}
 
 func (H) Name() string          { return "h" }
-func (H) CalledBy() []string    { return []string{"hotel"} }
-func (H) Mode() ExecutionMode   { return ModeSequential }
+func (H) CalledBy() []string    { return []string{"hotel", "h"} }
 func (H) Effects() []EffectFunc { return nil }
 func (c H) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -533,8 +482,7 @@ func (c H) Action(e *Engine, p string) error {
 type I struct{}
 
 func (I) Name() string          { return "i" }
-func (I) CalledBy() []string    { return []string{"india"} }
-func (I) Mode() ExecutionMode   { return ModeSequential }
+func (I) CalledBy() []string    { return []string{"india", "i"} }
 func (I) Effects() []EffectFunc { return nil }
 func (c I) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -546,8 +494,7 @@ func (c I) Action(e *Engine, p string) error {
 type J struct{}
 
 func (J) Name() string          { return "j" }
-func (J) CalledBy() []string    { return []string{"juliet"} }
-func (J) Mode() ExecutionMode   { return ModeSequential }
+func (J) CalledBy() []string    { return []string{"juliet", "j"} }
 func (J) Effects() []EffectFunc { return nil }
 func (c J) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -559,8 +506,7 @@ func (c J) Action(e *Engine, p string) error {
 type K struct{}
 
 func (K) Name() string          { return "k" }
-func (K) CalledBy() []string    { return []string{"kilo"} }
-func (K) Mode() ExecutionMode   { return ModeSequential }
+func (K) CalledBy() []string    { return []string{"kilo", "k"} }
 func (K) Effects() []EffectFunc { return nil }
 func (c K) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -572,8 +518,7 @@ func (c K) Action(e *Engine, p string) error {
 type L struct{}
 
 func (L) Name() string          { return "l" }
-func (L) CalledBy() []string    { return []string{"lima"} }
-func (L) Mode() ExecutionMode   { return ModeSequential }
+func (L) CalledBy() []string    { return []string{"lima", "l"} }
 func (L) Effects() []EffectFunc { return nil }
 func (c L) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -585,8 +530,7 @@ func (c L) Action(e *Engine, p string) error {
 type M struct{}
 
 func (M) Name() string          { return "m" }
-func (M) CalledBy() []string    { return []string{"mike"} }
-func (M) Mode() ExecutionMode   { return ModeSequential }
+func (M) CalledBy() []string    { return []string{"mike", "m"} }
 func (M) Effects() []EffectFunc { return nil }
 func (c M) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -598,8 +542,7 @@ func (c M) Action(e *Engine, p string) error {
 type N struct{}
 
 func (N) Name() string          { return "n" }
-func (N) CalledBy() []string    { return []string{"november"} }
-func (N) Mode() ExecutionMode   { return ModeSequential }
+func (N) CalledBy() []string    { return []string{"november", "n"} }
 func (N) Effects() []EffectFunc { return nil }
 func (c N) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -611,8 +554,7 @@ func (c N) Action(e *Engine, p string) error {
 type O struct{}
 
 func (O) Name() string          { return "o" }
-func (O) CalledBy() []string    { return []string{"oscar"} }
-func (O) Mode() ExecutionMode   { return ModeSequential }
+func (O) CalledBy() []string    { return []string{"oscar", "o"} }
 func (O) Effects() []EffectFunc { return nil }
 func (c O) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -624,8 +566,7 @@ func (c O) Action(e *Engine, p string) error {
 type P struct{}
 
 func (P) Name() string          { return "p" }
-func (P) CalledBy() []string    { return []string{"papa"} }
-func (P) Mode() ExecutionMode   { return ModeSequential }
+func (P) CalledBy() []string    { return []string{"papa", "p"} }
 func (P) Effects() []EffectFunc { return nil }
 func (c P) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -637,8 +578,7 @@ func (c P) Action(e *Engine, p string) error {
 type Q struct{}
 
 func (Q) Name() string          { return "q" }
-func (Q) CalledBy() []string    { return []string{"quebec"} }
-func (Q) Mode() ExecutionMode   { return ModeSequential }
+func (Q) CalledBy() []string    { return []string{"quebec", "q"} }
 func (Q) Effects() []EffectFunc { return nil }
 func (c Q) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -650,8 +590,7 @@ func (c Q) Action(e *Engine, p string) error {
 type R struct{}
 
 func (R) Name() string          { return "r" }
-func (R) CalledBy() []string    { return []string{"romeo"} }
-func (R) Mode() ExecutionMode   { return ModeSequential }
+func (R) CalledBy() []string    { return []string{"romeo", "r"} }
 func (R) Effects() []EffectFunc { return nil }
 func (c R) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -663,8 +602,7 @@ func (c R) Action(e *Engine, p string) error {
 type S struct{}
 
 func (S) Name() string          { return "s" }
-func (S) CalledBy() []string    { return []string{"sierra"} }
-func (S) Mode() ExecutionMode   { return ModeSequential }
+func (S) CalledBy() []string    { return []string{"sierra", "s"} }
 func (S) Effects() []EffectFunc { return nil }
 func (c S) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -676,8 +614,7 @@ func (c S) Action(e *Engine, p string) error {
 type T struct{}
 
 func (T) Name() string          { return "t" }
-func (T) CalledBy() []string    { return []string{"tango"} }
-func (T) Mode() ExecutionMode   { return ModeSequential }
+func (T) CalledBy() []string    { return []string{"tango", "t"} }
 func (T) Effects() []EffectFunc { return nil }
 func (c T) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -689,8 +626,7 @@ func (c T) Action(e *Engine, p string) error {
 type U struct{}
 
 func (U) Name() string          { return "u" }
-func (U) CalledBy() []string    { return []string{"uniform"} }
-func (U) Mode() ExecutionMode   { return ModeSequential }
+func (U) CalledBy() []string    { return []string{"uniform", "u"} }
 func (U) Effects() []EffectFunc { return nil }
 func (c U) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -702,8 +638,7 @@ func (c U) Action(e *Engine, p string) error {
 type V struct{}
 
 func (V) Name() string          { return "v" }
-func (V) CalledBy() []string    { return []string{"victor"} }
-func (V) Mode() ExecutionMode   { return ModeSequential }
+func (V) CalledBy() []string    { return []string{"victor", "v"} }
 func (V) Effects() []EffectFunc { return nil }
 func (c V) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -715,8 +650,7 @@ func (c V) Action(e *Engine, p string) error {
 type W struct{}
 
 func (W) Name() string          { return "w" }
-func (W) CalledBy() []string    { return []string{"whiskey"} }
-func (W) Mode() ExecutionMode   { return ModeSequential }
+func (W) CalledBy() []string    { return []string{"whiskey", "w"} }
 func (W) Effects() []EffectFunc { return nil }
 func (c W) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -728,8 +662,7 @@ func (c W) Action(e *Engine, p string) error {
 type X struct{}
 
 func (X) Name() string          { return "x" }
-func (X) CalledBy() []string    { return []string{"xray"} }
-func (X) Mode() ExecutionMode   { return ModeSequential }
+func (X) CalledBy() []string    { return []string{"xray", "x"} }
 func (X) Effects() []EffectFunc { return nil }
 func (c X) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -741,8 +674,7 @@ func (c X) Action(e *Engine, p string) error {
 type Y struct{}
 
 func (Y) Name() string          { return "y" }
-func (Y) CalledBy() []string    { return []string{"yankee"} }
-func (Y) Mode() ExecutionMode   { return ModeSequential }
+func (Y) CalledBy() []string    { return []string{"yankee", "y"} }
 func (Y) Effects() []EffectFunc { return nil }
 func (c Y) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -754,8 +686,7 @@ func (c Y) Action(e *Engine, p string) error {
 type Z struct{}
 
 func (Z) Name() string          { return "z" }
-func (Z) CalledBy() []string    { return []string{"zulu"} }
-func (Z) Mode() ExecutionMode   { return ModeSequential }
+func (Z) CalledBy() []string    { return []string{"zulu", "z"} }
 func (Z) Effects() []EffectFunc { return nil }
 func (c Z) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -772,7 +703,6 @@ type Zero struct{}
 
 func (Zero) Name() string          { return "zero" }
 func (Zero) CalledBy() []string    { return []string{"zero"} }
-func (Zero) Mode() ExecutionMode   { return ModeSequential }
 func (Zero) Effects() []EffectFunc { return nil }
 func (c Zero) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -785,7 +715,6 @@ type One struct{}
 
 func (One) Name() string          { return "one" }
 func (One) CalledBy() []string    { return []string{"one"} }
-func (One) Mode() ExecutionMode   { return ModeSequential }
 func (One) Effects() []EffectFunc { return nil }
 func (c One) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -798,7 +727,6 @@ type Two struct{}
 
 func (Two) Name() string          { return "two" }
 func (Two) CalledBy() []string    { return []string{"two"} }
-func (Two) Mode() ExecutionMode   { return ModeSequential }
 func (Two) Effects() []EffectFunc { return nil }
 func (c Two) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -811,7 +739,6 @@ type Three struct{}
 
 func (Three) Name() string          { return "three" }
 func (Three) CalledBy() []string    { return []string{"three"} }
-func (Three) Mode() ExecutionMode   { return ModeSequential }
 func (Three) Effects() []EffectFunc { return nil }
 func (c Three) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -824,7 +751,6 @@ type Four struct{}
 
 func (Four) Name() string          { return "four" }
 func (Four) CalledBy() []string    { return []string{"four"} }
-func (Four) Mode() ExecutionMode   { return ModeSequential }
 func (Four) Effects() []EffectFunc { return nil }
 func (c Four) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -837,7 +763,6 @@ type Five struct{}
 
 func (Five) Name() string          { return "five" }
 func (Five) CalledBy() []string    { return []string{"five"} }
-func (Five) Mode() ExecutionMode   { return ModeSequential }
 func (Five) Effects() []EffectFunc { return nil }
 func (c Five) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -850,7 +775,6 @@ type Six struct{}
 
 func (Six) Name() string          { return "six" }
 func (Six) CalledBy() []string    { return []string{"six"} }
-func (Six) Mode() ExecutionMode   { return ModeSequential }
 func (Six) Effects() []EffectFunc { return nil }
 func (c Six) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -863,7 +787,6 @@ type Seven struct{}
 
 func (Seven) Name() string          { return "seven" }
 func (Seven) CalledBy() []string    { return []string{"seven"} }
-func (Seven) Mode() ExecutionMode   { return ModeSequential }
 func (Seven) Effects() []EffectFunc { return nil }
 func (c Seven) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -876,7 +799,6 @@ type Eight struct{}
 
 func (Eight) Name() string          { return "eight" }
 func (Eight) CalledBy() []string    { return []string{"eight"} }
-func (Eight) Mode() ExecutionMode   { return ModeSequential }
 func (Eight) Effects() []EffectFunc { return nil }
 func (c Eight) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -889,7 +811,6 @@ type Nine struct{}
 
 func (Nine) Name() string          { return "nine" }
 func (Nine) CalledBy() []string    { return []string{"nine"} }
-func (Nine) Mode() ExecutionMode   { return ModeSequential }
 func (Nine) Effects() []EffectFunc { return nil }
 func (c Nine) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -906,7 +827,6 @@ type FOne struct{}
 
 func (FOne) Name() string          { return "f1" }
 func (FOne) CalledBy() []string    { return []string{"f1"} }
-func (FOne) Mode() ExecutionMode   { return ModeSequential }
 func (FOne) Effects() []EffectFunc { return nil }
 func (c FOne) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -919,7 +839,6 @@ type FTwo struct{}
 
 func (FTwo) Name() string          { return "f2" }
 func (FTwo) CalledBy() []string    { return []string{"f2"} }
-func (FTwo) Mode() ExecutionMode   { return ModeSequential }
 func (FTwo) Effects() []EffectFunc { return nil }
 func (c FTwo) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -932,7 +851,6 @@ type FThree struct{}
 
 func (FThree) Name() string          { return "f3" }
 func (FThree) CalledBy() []string    { return []string{"f3"} }
-func (FThree) Mode() ExecutionMode   { return ModeSequential }
 func (FThree) Effects() []EffectFunc { return nil }
 func (c FThree) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -945,7 +863,6 @@ type FFour struct{}
 
 func (FFour) Name() string          { return "f4" }
 func (FFour) CalledBy() []string    { return []string{"f4"} }
-func (FFour) Mode() ExecutionMode   { return ModeSequential }
 func (FFour) Effects() []EffectFunc { return nil }
 func (c FFour) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -958,7 +875,6 @@ type FFive struct{}
 
 func (FFive) Name() string          { return "f5" }
 func (FFive) CalledBy() []string    { return []string{"f5"} }
-func (FFive) Mode() ExecutionMode   { return ModeSequential }
 func (FFive) Effects() []EffectFunc { return nil }
 func (c FFive) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -971,7 +887,6 @@ type FSix struct{}
 
 func (FSix) Name() string          { return "f6" }
 func (FSix) CalledBy() []string    { return []string{"f6"} }
-func (FSix) Mode() ExecutionMode   { return ModeSequential }
 func (FSix) Effects() []EffectFunc { return nil }
 func (c FSix) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -984,7 +899,6 @@ type FSeven struct{}
 
 func (FSeven) Name() string          { return "f7" }
 func (FSeven) CalledBy() []string    { return []string{"f7"} }
-func (FSeven) Mode() ExecutionMode   { return ModeSequential }
 func (FSeven) Effects() []EffectFunc { return nil }
 func (c FSeven) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -997,7 +911,6 @@ type FEight struct{}
 
 func (FEight) Name() string          { return "f8" }
 func (FEight) CalledBy() []string    { return []string{"f8"} }
-func (FEight) Mode() ExecutionMode   { return ModeSequential }
 func (FEight) Effects() []EffectFunc { return nil }
 func (c FEight) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -1010,7 +923,6 @@ type FNine struct{}
 
 func (FNine) Name() string          { return "f9" }
 func (FNine) CalledBy() []string    { return []string{"f9"} }
-func (FNine) Mode() ExecutionMode   { return ModeSequential }
 func (FNine) Effects() []EffectFunc { return nil }
 func (c FNine) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -1023,7 +935,6 @@ type FTen struct{}
 
 func (FTen) Name() string          { return "f10" }
 func (FTen) CalledBy() []string    { return []string{"f10"} }
-func (FTen) Mode() ExecutionMode   { return ModeSequential }
 func (FTen) Effects() []EffectFunc { return nil }
 func (c FTen) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -1036,7 +947,6 @@ type FEleven struct{}
 
 func (FEleven) Name() string          { return "f11" }
 func (FEleven) CalledBy() []string    { return []string{"f11"} }
-func (FEleven) Mode() ExecutionMode   { return ModeSequential }
 func (FEleven) Effects() []EffectFunc { return nil }
 func (c FEleven) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -1049,7 +959,6 @@ type FTwelve struct{}
 
 func (FTwelve) Name() string          { return "f12" }
 func (FTwelve) CalledBy() []string    { return []string{"f12"} }
-func (FTwelve) Mode() ExecutionMode   { return ModeSequential }
 func (FTwelve) Effects() []EffectFunc { return nil }
 func (c FTwelve) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -1066,8 +975,7 @@ type Click struct{}
 
 func (c Click) Name() string        { return "click" }
 func (c Click) CalledBy() []string  { return []string{"click"} }
-func (Click) Mode() ExecutionMode   { return ModeSequential }
-func (Click) Effects() []EffectFunc { return nil }
+func (Click) Effects() []EffectFunc { return []EffectFunc{WaitAfter(50)} }
 func (c Click) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		e.Mouse.Click()
@@ -1080,7 +988,6 @@ type Left struct{}
 
 func (Left) Name() string          { return "mouse_left" }
 func (Left) CalledBy() []string    { return []string{"left"} }
-func (Left) Mode() ExecutionMode   { return ModeSequential }
 func (Left) Effects() []EffectFunc { return nil }
 func (Left) Action(e *Engine, phrase string) error {
 	return EffectChain(e, func() error {
@@ -1094,7 +1001,6 @@ type Right struct{}
 
 func (Right) Name() string          { return "mouse_right" }
 func (Right) CalledBy() []string    { return []string{"right"} }
-func (Right) Mode() ExecutionMode   { return ModeSequential }
 func (Right) Effects() []EffectFunc { return nil }
 func (Right) Action(e *Engine, phrase string) error {
 	return EffectChain(e, func() error {
@@ -1108,7 +1014,6 @@ type Up struct{}
 
 func (Up) Name() string          { return "mouse_up" }
 func (Up) CalledBy() []string    { return []string{"up"} }
-func (Up) Mode() ExecutionMode   { return ModeSequential }
 func (Up) Effects() []EffectFunc { return nil }
 func (Up) Action(e *Engine, phrase string) error {
 	return EffectChain(e, func() error {
@@ -1122,7 +1027,6 @@ type Down struct{}
 
 func (Down) Name() string          { return "mouse_down" }
 func (Down) CalledBy() []string    { return []string{"down"} }
-func (Down) Mode() ExecutionMode   { return ModeSequential }
 func (Down) Effects() []EffectFunc { return nil }
 func (Down) Action(e *Engine, phrase string) error {
 	return EffectChain(e, func() error {
@@ -1140,10 +1044,11 @@ type CamelCase struct{}
 
 func (CamelCase) Name() string          { return "camel_case" }
 func (CamelCase) CalledBy() []string    { return []string{"camel"} }
-func (CamelCase) Mode() ExecutionMode   { return ModeIsolated }
-func (CamelCase) Effects() []EffectFunc { return nil }
+func (CamelCase) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c CamelCase) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
+		// Pass the remaining spoken words to the keyboard's Camel handler
+		e.StickyKeyboard.CamelCase(e.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
@@ -1153,10 +1058,11 @@ type PascalCase struct{}
 
 func (PascalCase) Name() string          { return "pascal_case" }
 func (PascalCase) CalledBy() []string    { return []string{"pascal"} }
-func (PascalCase) Mode() ExecutionMode   { return ModeIsolated }
-func (PascalCase) Effects() []EffectFunc { return nil }
+func (PascalCase) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c PascalCase) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
+		// Pass the remaining spoken words to the keyboard's Pascal handler
+		e.StickyKeyboard.PascalCase(e.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
@@ -1166,23 +1072,25 @@ type SnakeCase struct{}
 
 func (SnakeCase) Name() string          { return "snake_case" }
 func (SnakeCase) CalledBy() []string    { return []string{"snake"} }
-func (SnakeCase) Mode() ExecutionMode   { return ModeIsolated }
-func (SnakeCase) Effects() []EffectFunc { return nil }
+func (SnakeCase) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c SnakeCase) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
+		// Pass the remaining spoken words to the keyboard's Snake handler
+		e.StickyKeyboard.SnakeCase(e.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
 
-// Say types out the subsequent phrase exactly as spoken.
+// Say types out the subsequent phrase formatted as a sentence.
 type Say struct{}
 
 func (Say) Name() string          { return "say" }
 func (Say) CalledBy() []string    { return []string{"say"} }
-func (Say) Mode() ExecutionMode   { return ModeIsolated }
-func (Say) Effects() []EffectFunc { return nil }
+func (Say) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c Say) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
+		// Pass the remaining spoken words to the keyboard's Sentence handler
+		e.StickyKeyboard.Sentence(e.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
