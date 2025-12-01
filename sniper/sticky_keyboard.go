@@ -116,7 +116,7 @@ func (k *StickyKeyboard) executeTap(key string) {
 
 func (k *StickyKeyboard) Shift()   { k.queueModifier("shift") }
 func (k *StickyKeyboard) Command() { k.queueModifier("command") }
-func (k *StickyKeyboard) Control() { k.queueModifier("control") }
+func (k *StickyKeyboard) Control() { k.queueModifier("ctrl") }
 func (k *StickyKeyboard) Alt()     { k.queueModifier("alt") }
 func (k *StickyKeyboard) Option()  { k.queueModifier("option") } // Alias for Alt/Mac specific
 

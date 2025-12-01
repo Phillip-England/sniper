@@ -22,8 +22,8 @@ func NewMouse() *Mouse {
 	return &Mouse{
 		X:     x,
 		Y:     y,
-		Jump:  50, // Default jump distance in pixels
-		Delay: time.Millisecond * 5,
+		Jump:  1, // Default jump distance in pixels
+		Delay: time.Microsecond * 1,
 	}
 }
 
@@ -44,9 +44,9 @@ func (m *Mouse) SetJump(pixels int) {
 // MoveLeft moves the mouse left by the current Jump amount, stopping at the screen edge (0).
 func (m *Mouse) MoveLeft() {
 	m.SyncPosition()
-	
+
 	targetX := m.X - m.Jump
-	
+
 	// Boundary check: Left edge is 0
 	if targetX < 0 {
 		targetX = 0
@@ -60,7 +60,7 @@ func (m *Mouse) MoveLeft() {
 // MoveRight moves the mouse right by the current Jump amount, stopping at the screen width.
 func (m *Mouse) MoveRight() {
 	m.SyncPosition()
-	
+
 	// Get screen width for boundary check
 	screenWidth, _ := robotgo.GetScreenSize()
 	targetX := m.X + m.Jump
@@ -78,7 +78,7 @@ func (m *Mouse) MoveRight() {
 // MoveUp moves the mouse up by the current Jump amount, stopping at the top edge (0).
 func (m *Mouse) MoveUp() {
 	m.SyncPosition()
-	
+
 	targetY := m.Y - m.Jump
 
 	// Boundary check: Top edge is 0
@@ -94,7 +94,7 @@ func (m *Mouse) MoveUp() {
 // MoveDown moves the mouse down by the current Jump amount, stopping at the screen height.
 func (m *Mouse) MoveDown() {
 	m.SyncPosition()
-	
+
 	// Get screen height for boundary check
 	_, screenHeight := robotgo.GetScreenSize()
 	targetY := m.Y + m.Jump

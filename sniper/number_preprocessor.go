@@ -13,7 +13,8 @@ type NumberPreprocessor struct {
 	singleNumberRegex   *regexp.Regexp
 	currencyRegex       *regexp.Regexp
 	commaRegex          *regexp.Regexp
-	
+	ordinalRegex        *regexp.Regexp
+
 	// Maps for text-to-digit conversion
 	units map[string]int
 	tens  map[string]int
@@ -23,14 +24,14 @@ type NumberPreprocessor struct {
 func NewNumberPreprocessor() *NumberPreprocessor {
 	np := &NumberPreprocessor{
 		units: map[string]int{
-			"zero": 0, "one": 1, "two": 2, "too": 2, "to": 2, "three": 3, "four": 4, 
-			"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, 
-			"ten": 10, "tin": 10, "eleven": 11, "twelve": 12, "thirteen": 13, 
-			"fourteen": 14, "fifteen": 15, "sixteen": 16, 
+			"zero": 0, "one": 1, "two": 2, "too": 2, "to": 2, "three": 3, "four": 4,
+			"five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+			"ten": 10, "tin": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+			"fourteen": 14, "fifteen": 15, "sixteen": 16,
 			"seventeen": 17, "eighteen": 18, "nineteen": 19,
 		},
 		tens: map[string]int{
-			"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, 
+			"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
 			"sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
 		},
 	}
@@ -43,10 +44,14 @@ func NewNumberPreprocessor() *NumberPreprocessor {
 	// Regex to find remaining single words (0-19 and 20, 30, etc.)
 	// We build this dynamically from the maps to keep it clean.
 	var words []string
-	for k := range np.units { words = append(words, k) }
-	for k := range np.tens { words = append(words, k) }
+	for k := range np.units {
+		words = append(words, k)
+	}
+	for k := range np.tens {
+		words = append(words, k)
+	}
 	words = append(words, "hundred") // specific edge case
-	
+
 	pattern := fmt.Sprintf(`(?i)\b(%s)\b`, strings.Join(words, "|"))
 	np.singleNumberRegex = regexp.MustCompile(pattern)
 
@@ -55,6 +60,13 @@ func NewNumberPreprocessor() *NumberPreprocessor {
 
 	// Regex to find commas surrounded by digits (e.g., 1,000)
 	np.commaRegex = regexp.MustCompile(`(\d),(\d)`)
+
+	// Regex to find ordinal suffixes attached to digits (e.g., 1st, 2nd, 3rd, 4th, 100th)
+	// (?i) = case insensitive
+	// (\d+) = capture the number
+	// (st|nd|rd|th) = match the suffix
+	// \b = word boundary to ensure we don't cut off specific weird codes or hex strings unnecessarily
+	np.ordinalRegex = regexp.MustCompile(`(?i)(\d+)(st|nd|rd|th)\b`)
 
 	return np
 }
@@ -70,7 +82,7 @@ func (np *NumberPreprocessor) Process(input string) string {
 		parts := strings.FieldsFunc(match, func(r rune) bool {
 			return r == '-' || r == ' '
 		})
-		
+
 		if len(parts) != 2 {
 			return match // Should not happen given the regex
 		}
@@ -86,7 +98,7 @@ func (np *NumberPreprocessor) Process(input string) string {
 		if lower == "hundred" {
 			return "100"
 		}
-		
+
 		if val, ok := np.units[lower]; ok {
 			return strconv.Itoa(val)
 		}
@@ -110,6 +122,9 @@ func (np *NumberPreprocessor) Process(input string) string {
 		processed = np.commaRegex.ReplaceAllString(processed, "$1$2")
 	}
 
+	// 5. Strip Ordinal Suffixes (1st -> 1, 2nd -> 2, 3rd -> 3, 4th -> 4)
+	// We replace the match with just the captured digit ($1)
+	processed = np.ordinalRegex.ReplaceAllString(processed, "$1")
+
 	return processed
 }
-

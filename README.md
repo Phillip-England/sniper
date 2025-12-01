@@ -5,3 +5,6 @@ Sniper speech is a system to control your computer using your voice. My passion 
 ```bash 
 go install github.com/phillip-england/sniper-speech@latest
 ```
+
+## Wayland Display Errors
+You may encounter issues when running `sniper` on system using wayland. For Ubuntu, I had to logout and switch my display settings on the login screen to X11 (xorg). It seems `robotgo` has issues interacting with the mouse when using wayland.

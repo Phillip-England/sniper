@@ -1,7 +1,6 @@
 package sniper
 
 import (
-	"strconv"
 	"strings"
 	"time"
 )
@@ -18,9 +17,27 @@ type Engine struct {
 	// registry maps string command names (e.g., "left") to their Cmd implementation.
 	registry map[string]Cmd
 
-	// Tokens holds the slice of Commands after the input string has been
-	// split, processed, and matched against the registry.
-	Tokens []Cmd
+	// Tokens holds the master slice of Tokens after parsing.
+	// This is the immutable sequence for the current execution cycle.
+	Tokens []Token
+
+	// RemainingTokens tracks which tokens have NOT yet been executed.
+	// This slice shrinks as Execute() iterates.
+	RemainingTokens []Token
+
+	// HandledTokens tracks which tokens HAVE been executed (or are about to be).
+	// This slice grows as Execute() iterates.
+	HandledTokens []Token
+
+	// RemainingRawWords tracks the unexecuted text as a single string.
+	// It is updated prior to token handling so commands can see what text remains.
+	RemainingRawWords string
+
+	// NextPhrase holds a string of consecutive Raw tokens immediately following the current token.
+	// It is calculated prior to token handling.
+	// Example: If tokens are [CMD] [RAW] [RAW] [NUMBER], while handling [CMD], NextPhrase is "raw raw".
+	// If the next token is not Raw, NextPhrase is "".
+	NextPhrase string
 
 	// TokenIndices maps the index of the Token in the Tokens slice
 	// to its original index in the RawWords slice.
@@ -40,6 +57,10 @@ type Engine struct {
 	// FirstCmdIsValid indicates if the very first word of the parsed string
 	// corresponded to a valid command in the registry.
 	FirstCmdIsValid bool
+
+	// IsOperating determines if the engine is currently allowed to execute actions.
+	// If false, the engine should halt operations.
+	IsOperating bool
 }
 
 // NewEngine initializes the Engine and sets up the internal keyboard types
@@ -49,102 +70,40 @@ func NewEngine() *Engine {
 		StickyKeyboard:     NewStickyKeyboard(),
 		numberPreprocessor: NewNumberPreprocessor(),
 		registry:           make(map[string]Cmd),
-		Tokens:             make([]Cmd, 0),
+		Tokens:             make([]Token, 0),
+		RemainingTokens:    make([]Token, 0),
+		HandledTokens:      make([]Token, 0),
+		RemainingRawWords:  "",
+		NextPhrase:         "", // Explicit initialization
 		TokenIndices:       make([]int, 0),
 		RawWords:           make([]string, 0),
 		Mouse:              NewMouse(),
-		Delay:              time.Millisecond * 1,
+		Delay:              time.Microsecond * 100,
 		LastCmd:            nil,   // Explicit initialization
 		FirstCmdIsValid:    false, // Explicit initialization
+		IsOperating:        true,  // Defaults to true so the engine runs
 	}
 
-	// Register available commands
+	// Register available commands dynamically from the global Registry
 	e.registerCommands()
 
 	return e
 }
 
-// registerCommands populates the internal map with available command structs.
+// registerCommands populates the internal map by iterating over the global Registry slice.
+// It maps the command to all of its 'CalledBy' aliases.
 func (e *Engine) registerCommands() {
-	// --- Navigation (Cardinals) ---
-	e.registry["north"] = North{}
-	e.registry["south"] = South{}
-	e.registry["east"] = East{}
-	e.registry["west"] = West{}
-	
-	// Aliases for user comfort (optional, but robust)
-	e.registry["up"] = Up{}
-	e.registry["down"] = Down{}
-	e.registry["right"] = Right{}
-	e.registry[""] = Right{}
-	e.registry["left"] = Left{}
-
-	// --- Modifiers ---
-	e.registry["shift"] = Shift{}
-	e.registry["control"] = Control{}
-	e.registry["alt"] = Alt{}
-	e.registry["command"] = Command{}
-
-	// --- Editing ---
-	e.registry["enter"] = Enter{}
-	e.registry["tab"] = Tab{}
-	e.registry["space"] = Space{}
-	e.registry["back"] = Back{}
-	e.registry["delete"] = Delete{}
-	e.registry["escape"] = Escape{}
-	e.registry["home"] = Home{}
-	e.registry["end"] = End{}
-	e.registry["pageup"] = PageUp{}
-	e.registry["pagedown"] = PageDown{}
-
-	// --- Symbols ---
-	e.registry["period"] = Dot{}
-	e.registry["comma"] = Comma{}
-	e.registry["slash"] = Slash{}
-	e.registry["window"] = Backslash{}
-	e.registry["semi"] = Semi{}
-	e.registry["quote"] = Quote{}
-	e.registry["bracket"] = Bracket{}
-	e.registry["closing"] = Closing{}
-	e.registry["dash"] = Dash{}
-	e.registry["equals"] = Equals{}
-	e.registry["tick"] = Tick{}
-
-	// --- NATO Alphabet ---
-	e.registry["alpha"] = Alpha{}
-	e.registry["bravo"] = Bravo{}
-	e.registry["charlie"] = Charlie{}
-	e.registry["delta"] = Delta{}
-	e.registry["echo"] = Echo{}
-	e.registry["foxtrot"] = Foxtrot{}
-	e.registry["golf"] = Golf{}
-	e.registry["hotel"] = Hotel{}
-	e.registry["india"] = India{}
-	e.registry["juliet"] = Juliet{}
-	e.registry["kilo"] = Kilo{}
-	e.registry["lima"] = Lima{}
-	e.registry["mike"] = Mike{}
-	e.registry["november"] = November{}
-	e.registry["oscar"] = Oscar{}
-	e.registry["papa"] = Papa{}
-	e.registry["quebec"] = Quebec{}
-	e.registry["romeo"] = Romeo{}
-	e.registry["sierra"] = Sierra{}
-	e.registry["tango"] = Tango{}
-	e.registry["uniform"] = Uniform{}
-	e.registry["victor"] = Victor{}
-	e.registry["whiskey"] = Whiskey{}
-	e.registry["xray"] = Xray{}
-	e.registry["x-ray"] = Xray{}
-	e.registry["yankee"] = Yankee{}
-	e.registry["zulu"] = Zulu{}
-
-	// --- Mouse ---
-	e.registry["click"] = Click{}
+	for _, cmd := range Registry {
+		// Iterate over the slice of triggers returned by CalledBy
+		for _, trigger := range cmd.CalledBy() {
+			key := strings.ToLower(trigger)
+			e.registry[key] = cmd
+		}
+	}
 }
 
 // Parse accepts a raw input string, converts it to lowercase, splits it,
-// processes numbers, maps strings to Commands, and stores the result in Tokens.
+// processes numbers, maps strings to Tokens, and stores the result.
 func (e *Engine) Parse(input string) {
 	// Reset state for the new parse
 	e.FirstCmdIsValid = false
@@ -157,108 +116,93 @@ func (e *Engine) Parse(input string) {
 	rawInput := strings.Fields(input)
 
 	// 2. Initialize the slices to store processed tokens and words.
-	e.Tokens = make([]Cmd, 0, len(rawInput))
+	e.Tokens = make([]Token, 0, len(rawInput))
 	e.TokenIndices = make([]int, 0, len(rawInput))
 	e.RawWords = make([]string, 0, len(rawInput))
 
-	// Check if the first word is valid immediately after splitting
-	if len(rawInput) > 0 {
-		firstWordProcessed := e.numberPreprocessor.Process(rawInput[0])
-		if _, ok := e.registry[firstWordProcessed]; ok {
+	// 3. Process words into Tokens using the Factory
+	for i, word := range rawInput {
+		// Use the TokenFactory to create the specific token type (Cmd, Number, or Raw)
+		// This handles the number preprocessing internally.
+		token := TokenFactory(word, e.registry, e.numberPreprocessor)
+
+		// Store the token and the raw word (processed literal)
+		e.Tokens = append(e.Tokens, token)
+		e.RawWords = append(e.RawWords, token.Literal())
+		e.TokenIndices = append(e.TokenIndices, i)
+
+		// Check validity of first command (legacy logic support)
+		if i == 0 && token.Type() == TokenTypeCmd {
 			e.FirstCmdIsValid = true
 		}
 	}
 
-	// 3. Run the pre-processor and convert to Command objects.
-	for i, word := range rawInput {
-		// Convert text to digits if applicable (e.g., "one" -> "1")
-		// Note: The registry now has "one", "two", etc. explicitly mapped.
-		// If NumberPreprocessor converts "one" -> "1", we need to make sure
-		// we handle that.
-		// Assuming NumberPreprocessor converts "one" to "1".
-		// We have registered "one" as a text key, but if the preprocessor runs first,
-		// it might turn it into a digit string.
-		// NOTE: In the Execute loop, we check e.registry[word].
-		// If "one" becomes "1", we need registry["1"] or rely on strconv.Atoi logic.
-		// Current logic: Standard words like "alpha" are not touched by NumberPreprocessor.
-		// "one" -> "1".
-		// To support the explicit command "one" (which types 1), we can either:
-		// A) Let NumberPreprocessor turn it to "1" and have the loop treat it as a repetition number.
-		// B) If we want "one" to TYPE the number 1, we must rely on the struct.
-		// Given the logic in Execute: if it's in registry, it executes.
-		// If it's a number, it repeats previous.
-		// Conflict: If I say "alpha one", do I want "a" then repeat "a" once? Or "a" then type "1"?
-		// Usually "alpha 5" means repeat a 5 times.
-		// So "one", "two" etc in registry might conflict with repetition logic if the preprocessor converts them.
-		// However, I have added them to registry.
-		// If Preprocessor converts "one" -> "1":
-		// We need registry["1"] = One{} if we want it to be a command.
-		// BUT the user logic says "If it is a Number: Repeat LastCmd".
-		// So we should probably NOT register "one", "two" if we want them to act as multipliers.
-		// BUT the user explicitly asked for "generate a command for each keyboard press".
-		// This implies they want to be able to type numbers by voice.
-		// I have registered "one", "two". If the preprocessor leaves them as words, they work as commands.
-		processedWord := e.numberPreprocessor.Process(word)
+	// 4. Initialize the tracking slices.
+	// At the start of execution, Handled is empty, and Remaining is a copy of all Tokens.
+	e.HandledTokens = make([]Token, 0, len(e.Tokens))
+	e.RemainingTokens = make([]Token, len(e.Tokens))
+	copy(e.RemainingTokens, e.Tokens)
 
-		e.RawWords = append(e.RawWords, processedWord)
-
-		// Look up the string in our command registry
-		if cmd, found := e.registry[processedWord]; found {
-			e.Tokens = append(e.Tokens, cmd)
-			e.TokenIndices = append(e.TokenIndices, i)
-		}
-	}
+	// 5. Initialize RemainingRawWords with the full sentence at the start
+	e.RemainingRawWords = strings.Join(e.RawWords, " ")
 }
 
-// Execute iterates over the RawWords linearly. It processes each word as an entity:
-// - If it is a Command: Execute it and set it as the `LastCmd`.
-// - If it is a Number: Repeat `LastCmd` (n-1) times, then clear `LastCmd`.
+// Execute iterates over the Tokens linearly. It delegates logic to the
+// Handle function of each token.
 func (e *Engine) Execute() error {
 	// Note: e.LastCmd was reset in Parse(), so we start fresh here unless
 	// Parse wasn't called immediately before.
 
-	for i, word := range e.RawWords {
-		// 1. Check if the word is a known command in the registry
-		if cmd, isCommand := e.registry[word]; isCommand {
-			// Check for "Isolated" mode (like "phrase hello world")
-			if cmd.Mode() == ModeIsolated {
-				payload := ""
-				// Join everything remaining in RawWords as the payload
-				if i+1 < len(e.RawWords) {
-					payload = strings.Join(e.RawWords[i+1:], " ")
-				}
-				// Execute and return immediately (consumes rest of input)
-				return cmd.Action(e, payload)
-			}
+	for i, token := range e.Tokens {
+		// STATE UPDATE:
+		// We update remaining words and phrase data before handling tokens so the
+		// current token logic can access the future string state if needed.
 
-			// Execute the standard command once
-			if err := cmd.Action(e, ""); err != nil {
-				return err
-			}
-
-			// Store this as the previous command for potential repetition
-			e.LastCmd = cmd
-			continue
+		// 1. Update RemainingRawWords
+		// We want the words AFTER the current one.
+		// If this is the last token, the remaining string is empty.
+		if i+1 < len(e.RawWords) {
+			e.RemainingRawWords = strings.Join(e.RawWords[i+1:], " ")
+		} else {
+			e.RemainingRawWords = ""
 		}
 
-		// 2. If it's not a command, check if it is a number
-		if val, err := strconv.Atoi(word); err == nil {
-			// We only repeat if we have a valid previous command in memory
-			if e.LastCmd != nil {
-				// The command already ran once when we encountered it.
-				// We run it (val - 1) more times.
-				if val > 1 {
-					for k := 0; k < val-1; k++ {
-						if err := e.LastCmd.Action(e, ""); err != nil {
-							return err
-						}
+		// 2. Update NextPhrase
+		// We look ahead to see if the *immediate* next token is Raw.
+		// If so, we collect it and any subsequent Raw tokens.
+		e.NextPhrase = "" // Reset for current iteration
+		if i+1 < len(e.Tokens) {
+			// Check if the very next token is Raw
+			if e.Tokens[i+1].Type() == TokenTypeRaw {
+				var rawParts []string
+				// Iterate forward starting from the next token
+				for j := i + 1; j < len(e.Tokens); j++ {
+					if e.Tokens[j].Type() == TokenTypeRaw {
+						rawParts = append(rawParts, e.Tokens[j].Literal())
+					} else {
+						// We hit a Cmd or Number; stop collecting the phrase
+						break
 					}
 				}
-				// CRITICAL: Wash away the previous action.
-				// As per requirements: "left 10 10" -> The second 10 should be skipped.
-				e.LastCmd = nil
+				e.NextPhrase = strings.Join(rawParts, " ")
 			}
-			// If LastCmd is nil, we simply ignore this number.
+		}
+
+		// 3. Add to Handled list
+		e.HandledTokens = append(e.HandledTokens, token)
+
+		// 4. Remove from Remaining list (pop from front)
+		if len(e.RemainingTokens) > 0 {
+			e.RemainingTokens = e.RemainingTokens[1:]
+		}
+
+		// 5. Execute logic
+		stop, err := token.Handle(e, i)
+		if err != nil {
+			return err
+		}
+		if stop {
+			return nil
 		}
 	}
 

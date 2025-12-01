@@ -2,13 +2,19 @@ package sniper
 
 // Cmd represents a voice command within the system.
 type Cmd interface {
+	// Name returns the unique string identifier for the command (e.g., "shift", "a").
+	Name() string
+
+	// CalledBy returns the slice of strings that trigger the command.
+	CalledBy() []string
 
 	// Mode tells the engine if this is Sequential or Isolated
 	Mode() ExecutionMode
 
+	// Effects returns a list of middleware to run for this command.
+	Effects() []EffectFunc
+
 	// Action contains the actual business logic to perform.
-	// It accepts the Engine so the command can access state (Keyboard, Tokens, etc.).
-	// It also accepts a captured phrase string if the command is Isolated.
 	Action(e *Engine, phrase string) error
 }
 
@@ -20,26 +26,8 @@ const (
 	ModeSequential ExecutionMode = iota
 
 	// ModeIsolated: The command pauses or clears the queue and runs alone.
-	// (e.g., "Stop Listening" or "System Shutdown")
 	ModeIsolated
 )
-
-// --- Raw Text Handling ---
-
-// RawToken represents a word that was not matched in the command registry.
-// It is stored in the Token list so that Isolated commands (like "camel case")
-// can access the raw text data contextually.
-type RawToken struct {
-	Value string
-}
-
-func (RawToken) Mode() ExecutionMode { return ModeSequential }
-
-// Action for RawToken is a no-op. It is skipped during standard execution
-// but remains available in the e.Tokens slice for other commands to inspect.
-func (RawToken) Action(e *Engine, phrase string) error {
-	return nil
-}
 
 // ----------------------------------------------------------------------------
 // MODIFIERS
@@ -47,23 +35,55 @@ func (RawToken) Action(e *Engine, phrase string) error {
 
 type Shift struct{}
 
-func (Shift) Mode() ExecutionMode               { return ModeSequential }
-func (c Shift) Action(e *Engine, p string) error { e.StickyKeyboard.Shift(); return nil }
+func (Shift) Name() string          { return "shift" }
+func (Shift) CalledBy() []string    { return []string{"shift"} }
+func (Shift) Mode() ExecutionMode   { return ModeSequential }
+func (Shift) Effects() []EffectFunc { return nil }
+func (c Shift) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Shift()
+		return nil
+	}, c.Effects()...)
+}
 
 type Control struct{}
 
-func (Control) Mode() ExecutionMode               { return ModeSequential }
-func (c Control) Action(e *Engine, p string) error { e.StickyKeyboard.Control(); return nil }
+func (Control) Name() string          { return "control" }
+func (Control) CalledBy() []string    { return []string{"control"} }
+func (Control) Mode() ExecutionMode   { return ModeSequential }
+func (Control) Effects() []EffectFunc { return nil }
+func (c Control) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control()
+		return nil
+	}, c.Effects()...)
+}
 
 type Alt struct{}
 
-func (Alt) Mode() ExecutionMode               { return ModeSequential }
-func (c Alt) Action(e *Engine, p string) error { e.StickyKeyboard.Alt(); return nil }
+func (Alt) Name() string          { return "alt" }
+func (Alt) CalledBy() []string    { return []string{"alt"} }
+func (Alt) Mode() ExecutionMode   { return ModeSequential }
+func (Alt) Effects() []EffectFunc { return nil }
+func (c Alt) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Alt()
+		return nil
+	}, c.Effects()...)
+}
 
 type Command struct{}
 
-func (Command) Mode() ExecutionMode               { return ModeSequential }
-func (c Command) Action(e *Engine, p string) error { e.StickyKeyboard.Command(); return nil }
+func (Command) Name() string          { return "command" }
+func (Command) CalledBy() []string    { return []string{"command"} }
+func (Command) Mode() ExecutionMode   { return ModeSequential }
+func (Command) Effects() []EffectFunc { return nil }
+func (c Command) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Command()
+		return nil
+	}, c.Effects()...)
+}
 
 // ----------------------------------------------------------------------------
 // NAVIGATION (ARROWS mapped to Cardinals)
@@ -71,23 +91,55 @@ func (c Command) Action(e *Engine, p string) error { e.StickyKeyboard.Command();
 
 type North struct{} // Up
 
-func (North) Mode() ExecutionMode               { return ModeSequential }
-func (c North) Action(e *Engine, p string) error { e.StickyKeyboard.Up(); return nil }
+func (North) Name() string          { return "north" }
+func (North) CalledBy() []string    { return []string{"north"} }
+func (North) Mode() ExecutionMode   { return ModeSequential }
+func (North) Effects() []EffectFunc { return nil }
+func (c North) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Up()
+		return nil
+	}, c.Effects()...)
+}
 
 type South struct{} // Down
 
-func (South) Mode() ExecutionMode               { return ModeSequential }
-func (c South) Action(e *Engine, p string) error { e.StickyKeyboard.Down(); return nil }
+func (South) Name() string          { return "south" }
+func (South) CalledBy() []string    { return []string{"south"} }
+func (South) Mode() ExecutionMode   { return ModeSequential }
+func (South) Effects() []EffectFunc { return nil }
+func (c South) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Down()
+		return nil
+	}, c.Effects()...)
+}
 
 type East struct{} // Right
 
-func (East) Mode() ExecutionMode               { return ModeSequential }
-func (c East) Action(e *Engine, p string) error { e.StickyKeyboard.Right(); return nil }
+func (East) Name() string          { return "east" }
+func (East) CalledBy() []string    { return []string{"east"} }
+func (East) Mode() ExecutionMode   { return ModeSequential }
+func (East) Effects() []EffectFunc { return nil }
+func (c East) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Right()
+		return nil
+	}, c.Effects()...)
+}
 
 type West struct{} // Left
 
-func (West) Mode() ExecutionMode               { return ModeSequential }
-func (c West) Action(e *Engine, p string) error { e.StickyKeyboard.Left(); return nil }
+func (West) Name() string          { return "west" }
+func (West) CalledBy() []string    { return []string{"west"} }
+func (West) Mode() ExecutionMode   { return ModeSequential }
+func (West) Effects() []EffectFunc { return nil }
+func (c West) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Left()
+		return nil
+	}, c.Effects()...)
+}
 
 // ----------------------------------------------------------------------------
 // EDITING & SPECIAL KEYS
@@ -95,53 +147,133 @@ func (c West) Action(e *Engine, p string) error { e.StickyKeyboard.Left(); retur
 
 type Enter struct{}
 
-func (Enter) Mode() ExecutionMode               { return ModeSequential }
-func (c Enter) Action(e *Engine, p string) error { e.StickyKeyboard.Enter(); return nil }
+func (Enter) Name() string          { return "enter" }
+func (Enter) CalledBy() []string    { return []string{"enter"} }
+func (Enter) Mode() ExecutionMode   { return ModeSequential }
+func (Enter) Effects() []EffectFunc { return nil }
+func (c Enter) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Enter()
+		return nil
+	}, c.Effects()...)
+}
 
 type Tab struct{}
 
-func (Tab) Mode() ExecutionMode               { return ModeSequential }
-func (c Tab) Action(e *Engine, p string) error { e.StickyKeyboard.Tab(); return nil }
+func (Tab) Name() string          { return "tab" }
+func (Tab) CalledBy() []string    { return []string{"tab"} }
+func (Tab) Mode() ExecutionMode   { return ModeSequential }
+func (Tab) Effects() []EffectFunc { return nil }
+func (c Tab) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Tab()
+		return nil
+	}, c.Effects()...)
+}
 
 type Space struct{}
 
-func (Space) Mode() ExecutionMode               { return ModeSequential }
-func (c Space) Action(e *Engine, p string) error { e.StickyKeyboard.Space(); return nil }
+func (Space) Name() string          { return "space" }
+func (Space) CalledBy() []string    { return []string{"space"} }
+func (Space) Mode() ExecutionMode   { return ModeSequential }
+func (Space) Effects() []EffectFunc { return nil }
+func (c Space) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Space()
+		return nil
+	}, c.Effects()...)
+}
 
 type Back struct{} // Backspace
 
-func (Back) Mode() ExecutionMode               { return ModeSequential }
-func (c Back) Action(e *Engine, p string) error { e.StickyKeyboard.Backspace(); return nil }
+func (Back) Name() string          { return "back" }
+func (Back) CalledBy() []string    { return []string{"back"} }
+func (Back) Mode() ExecutionMode   { return ModeSequential }
+func (Back) Effects() []EffectFunc { return nil }
+func (c Back) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Backspace()
+		return nil
+	}, c.Effects()...)
+}
 
 type Delete struct{}
 
-func (Delete) Mode() ExecutionMode               { return ModeSequential }
-func (c Delete) Action(e *Engine, p string) error { e.StickyKeyboard.Delete(); return nil }
+func (Delete) Name() string          { return "delete" }
+func (Delete) CalledBy() []string    { return []string{"delete"} }
+func (Delete) Mode() ExecutionMode   { return ModeSequential }
+func (Delete) Effects() []EffectFunc { return nil }
+func (c Delete) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Delete()
+		return nil
+	}, c.Effects()...)
+}
 
 type Escape struct{}
 
-func (Escape) Mode() ExecutionMode               { return ModeSequential }
-func (c Escape) Action(e *Engine, p string) error { e.StickyKeyboard.Escape(); return nil }
+func (Escape) Name() string          { return "escape" }
+func (Escape) CalledBy() []string    { return []string{"escape"} }
+func (Escape) Mode() ExecutionMode   { return ModeSequential }
+func (Escape) Effects() []EffectFunc { return nil }
+func (c Escape) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Escape()
+		return nil
+	}, c.Effects()...)
+}
 
 type Home struct{}
 
-func (Home) Mode() ExecutionMode               { return ModeSequential }
-func (c Home) Action(e *Engine, p string) error { e.StickyKeyboard.Home(); return nil }
+func (Home) Name() string          { return "home" }
+func (Home) CalledBy() []string    { return []string{"home"} }
+func (Home) Mode() ExecutionMode   { return ModeSequential }
+func (Home) Effects() []EffectFunc { return nil }
+func (c Home) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Home()
+		return nil
+	}, c.Effects()...)
+}
 
 type End struct{}
 
-func (End) Mode() ExecutionMode               { return ModeSequential }
-func (c End) Action(e *Engine, p string) error { e.StickyKeyboard.End(); return nil }
+func (End) Name() string          { return "end" }
+func (End) CalledBy() []string    { return []string{"end"} }
+func (End) Mode() ExecutionMode   { return ModeSequential }
+func (End) Effects() []EffectFunc { return nil }
+func (c End) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.End()
+		return nil
+	}, c.Effects()...)
+}
 
 type PageUp struct{}
 
-func (PageUp) Mode() ExecutionMode               { return ModeSequential }
-func (c PageUp) Action(e *Engine, p string) error { e.StickyKeyboard.PageUp(); return nil }
+func (PageUp) Name() string          { return "page_up" }
+func (PageUp) CalledBy() []string    { return []string{"page_up"} }
+func (PageUp) Mode() ExecutionMode   { return ModeSequential }
+func (PageUp) Effects() []EffectFunc { return nil }
+func (c PageUp) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.PageUp()
+		return nil
+	}, c.Effects()...)
+}
 
 type PageDown struct{}
 
-func (PageDown) Mode() ExecutionMode               { return ModeSequential }
-func (c PageDown) Action(e *Engine, p string) error { e.StickyKeyboard.PageDown(); return nil }
+func (PageDown) Name() string          { return "page_down" }
+func (PageDown) CalledBy() []string    { return []string{"page_down"} }
+func (PageDown) Mode() ExecutionMode   { return ModeSequential }
+func (PageDown) Effects() []EffectFunc { return nil }
+func (c PageDown) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.PageDown()
+		return nil
+	}, c.Effects()...)
+}
 
 // ----------------------------------------------------------------------------
 // SYMBOLS (Single word names)
@@ -149,192 +281,488 @@ func (c PageDown) Action(e *Engine, p string) error { e.StickyKeyboard.PageDown(
 
 type Dot struct{} // .
 
-func (Dot) Mode() ExecutionMode               { return ModeSequential }
-func (c Dot) Action(e *Engine, p string) error { e.StickyKeyboard.Period(); return nil }
+func (Dot) Name() string          { return "dot" }
+func (Dot) CalledBy() []string    { return []string{"dot"} }
+func (Dot) Mode() ExecutionMode   { return ModeSequential }
+func (Dot) Effects() []EffectFunc { return nil }
+func (c Dot) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Period()
+		return nil
+	}, c.Effects()...)
+}
 
 type Comma struct{} // ,
 
-func (Comma) Mode() ExecutionMode               { return ModeSequential }
-func (c Comma) Action(e *Engine, p string) error { e.StickyKeyboard.Comma(); return nil }
+func (Comma) Name() string          { return "comma" }
+func (Comma) CalledBy() []string    { return []string{"comma"} }
+func (Comma) Mode() ExecutionMode   { return ModeSequential }
+func (Comma) Effects() []EffectFunc { return nil }
+func (c Comma) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Comma()
+		return nil
+	}, c.Effects()...)
+}
 
 type Slash struct{} // /
 
-func (Slash) Mode() ExecutionMode               { return ModeSequential }
-func (c Slash) Action(e *Engine, p string) error { e.StickyKeyboard.Slash(); return nil }
+func (Slash) Name() string          { return "slash" }
+func (Slash) CalledBy() []string    { return []string{"slash"} }
+func (Slash) Mode() ExecutionMode   { return ModeSequential }
+func (Slash) Effects() []EffectFunc { return nil }
+func (c Slash) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Slash()
+		return nil
+	}, c.Effects()...)
+}
 
 type Backslash struct{} // \
 
-func (Backslash) Mode() ExecutionMode               { return ModeSequential }
-func (c Backslash) Action(e *Engine, p string) error { e.StickyKeyboard.Backslash(); return nil }
+func (Backslash) Name() string          { return "backslash" }
+func (Backslash) CalledBy() []string    { return []string{"backslash"} }
+func (Backslash) Mode() ExecutionMode   { return ModeSequential }
+func (Backslash) Effects() []EffectFunc { return nil }
+func (c Backslash) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Backslash()
+		return nil
+	}, c.Effects()...)
+}
 
 type Semi struct{} // ;
 
-func (Semi) Mode() ExecutionMode               { return ModeSequential }
-func (c Semi) Action(e *Engine, p string) error { e.StickyKeyboard.Semicolon(); return nil }
+func (Semi) Name() string          { return "semi" }
+func (Semi) CalledBy() []string    { return []string{"semi"} }
+func (Semi) Mode() ExecutionMode   { return ModeSequential }
+func (Semi) Effects() []EffectFunc { return nil }
+func (c Semi) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Semicolon()
+		return nil
+	}, c.Effects()...)
+}
 
 type Quote struct{} // '
 
-func (Quote) Mode() ExecutionMode               { return ModeSequential }
-func (c Quote) Action(e *Engine, p string) error { e.StickyKeyboard.Quote(); return nil }
+func (Quote) Name() string          { return "quote" }
+func (Quote) CalledBy() []string    { return []string{"quote"} }
+func (Quote) Mode() ExecutionMode   { return ModeSequential }
+func (Quote) Effects() []EffectFunc { return nil }
+func (c Quote) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Quote()
+		return nil
+	}, c.Effects()...)
+}
 
 type Bracket struct{} // [
 
-func (Bracket) Mode() ExecutionMode               { return ModeSequential }
-func (c Bracket) Action(e *Engine, p string) error { e.StickyKeyboard.BracketLeft(); return nil }
+func (Bracket) Name() string          { return "bracket" }
+func (Bracket) CalledBy() []string    { return []string{"bracket"} }
+func (Bracket) Mode() ExecutionMode   { return ModeSequential }
+func (Bracket) Effects() []EffectFunc { return nil }
+func (c Bracket) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.BracketLeft()
+		return nil
+	}, c.Effects()...)
+}
 
 type Closing struct{} // ]
 
-func (Closing) Mode() ExecutionMode               { return ModeSequential }
-func (c Closing) Action(e *Engine, p string) error { e.StickyKeyboard.BracketRight(); return nil }
+func (Closing) Name() string          { return "closing" }
+func (Closing) CalledBy() []string    { return []string{"closing"} }
+func (Closing) Mode() ExecutionMode   { return ModeSequential }
+func (Closing) Effects() []EffectFunc { return nil }
+func (c Closing) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.BracketRight()
+		return nil
+	}, c.Effects()...)
+}
 
 type Dash struct{} // -
 
-func (Dash) Mode() ExecutionMode               { return ModeSequential }
-func (c Dash) Action(e *Engine, p string) error { e.StickyKeyboard.Minus(); return nil }
+func (Dash) Name() string          { return "dash" }
+func (Dash) CalledBy() []string    { return []string{"hyphen"} }
+func (Dash) Mode() ExecutionMode   { return ModeSequential }
+func (Dash) Effects() []EffectFunc { return nil }
+func (c Dash) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Minus()
+		return nil
+	}, c.Effects()...)
+}
 
 type Equals struct{} // =
 
-func (Equals) Mode() ExecutionMode               { return ModeSequential }
-func (c Equals) Action(e *Engine, p string) error { e.StickyKeyboard.Equal(); return nil }
+func (Equals) Name() string          { return "equals" }
+func (Equals) CalledBy() []string    { return []string{"equals"} }
+func (Equals) Mode() ExecutionMode   { return ModeSequential }
+func (Equals) Effects() []EffectFunc { return nil }
+func (c Equals) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Equal()
+		return nil
+	}, c.Effects()...)
+}
 
 type Tick struct{} // `
 
-func (Tick) Mode() ExecutionMode               { return ModeSequential }
-func (c Tick) Action(e *Engine, p string) error { e.StickyKeyboard.Backtick(); return nil }
+func (Tick) Name() string          { return "tick" }
+func (Tick) CalledBy() []string    { return []string{"tick"} }
+func (Tick) Mode() ExecutionMode   { return ModeSequential }
+func (Tick) Effects() []EffectFunc { return nil }
+func (c Tick) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Backtick()
+		return nil
+	}, c.Effects()...)
+}
 
 // ----------------------------------------------------------------------------
 // ALPHABET (NATO)
 // ----------------------------------------------------------------------------
 
-type Alpha struct{}
+type A struct{}
 
-func (Alpha) Mode() ExecutionMode               { return ModeSequential }
-func (c Alpha) Action(e *Engine, p string) error { e.StickyKeyboard.A(); return nil }
+func (A) Name() string          { return "a" }
+func (A) CalledBy() []string    { return []string{"alpha"} }
+func (A) Mode() ExecutionMode   { return ModeSequential }
+func (A) Effects() []EffectFunc { return nil }
+func (c A) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.A()
+		return nil
+	}, c.Effects()...)
+}
 
-type Bravo struct{}
+type B struct{}
 
-func (Bravo) Mode() ExecutionMode               { return ModeSequential }
-func (c Bravo) Action(e *Engine, p string) error { e.StickyKeyboard.B(); return nil }
+func (B) Name() string          { return "b" }
+func (B) CalledBy() []string    { return []string{"bravo"} }
+func (B) Mode() ExecutionMode   { return ModeSequential }
+func (B) Effects() []EffectFunc { return nil }
+func (c B) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.B()
+		return nil
+	}, c.Effects()...)
+}
 
-type Charlie struct{}
+type C struct{}
 
-func (Charlie) Mode() ExecutionMode               { return ModeSequential }
-func (c Charlie) Action(e *Engine, p string) error { e.StickyKeyboard.C(); return nil }
+func (C) Name() string          { return "c" }
+func (C) CalledBy() []string    { return []string{"charlie"} }
+func (C) Mode() ExecutionMode   { return ModeSequential }
+func (C) Effects() []EffectFunc { return nil }
+func (c C) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.C()
+		return nil
+	}, c.Effects()...)
+}
 
-type Delta struct{}
+type D struct{}
 
-func (Delta) Mode() ExecutionMode               { return ModeSequential }
-func (c Delta) Action(e *Engine, p string) error { e.StickyKeyboard.D(); return nil }
+func (D) Name() string          { return "d" }
+func (D) CalledBy() []string    { return []string{"delta"} }
+func (D) Mode() ExecutionMode   { return ModeSequential }
+func (D) Effects() []EffectFunc { return nil }
+func (c D) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.D()
+		return nil
+	}, c.Effects()...)
+}
 
-type Echo struct{}
+type E struct{}
 
-func (Echo) Mode() ExecutionMode               { return ModeSequential }
-func (c Echo) Action(e *Engine, p string) error { e.StickyKeyboard.E(); return nil }
+func (E) Name() string          { return "e" }
+func (E) CalledBy() []string    { return []string{"echo"} }
+func (E) Mode() ExecutionMode   { return ModeSequential }
+func (E) Effects() []EffectFunc { return nil }
+func (c E) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.E()
+		return nil
+	}, c.Effects()...)
+}
 
-type Foxtrot struct{}
+type F struct{}
 
-func (Foxtrot) Mode() ExecutionMode               { return ModeSequential }
-func (c Foxtrot) Action(e *Engine, p string) error { e.StickyKeyboard.F(); return nil }
+func (F) Name() string          { return "f" }
+func (F) CalledBy() []string    { return []string{"foxtrot"} }
+func (F) Mode() ExecutionMode   { return ModeSequential }
+func (F) Effects() []EffectFunc { return nil }
+func (c F) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F()
+		return nil
+	}, c.Effects()...)
+}
 
-type Golf struct{}
+type G struct{}
 
-func (Golf) Mode() ExecutionMode               { return ModeSequential }
-func (c Golf) Action(e *Engine, p string) error { e.StickyKeyboard.G(); return nil }
+func (G) Name() string          { return "g" }
+func (G) CalledBy() []string    { return []string{"golf"} }
+func (G) Mode() ExecutionMode   { return ModeSequential }
+func (G) Effects() []EffectFunc { return nil }
+func (c G) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.G()
+		return nil
+	}, c.Effects()...)
+}
 
-type Hotel struct{}
+type H struct{}
 
-func (Hotel) Mode() ExecutionMode               { return ModeSequential }
-func (c Hotel) Action(e *Engine, p string) error { e.StickyKeyboard.H(); return nil }
+func (H) Name() string          { return "h" }
+func (H) CalledBy() []string    { return []string{"hotel"} }
+func (H) Mode() ExecutionMode   { return ModeSequential }
+func (H) Effects() []EffectFunc { return nil }
+func (c H) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.H()
+		return nil
+	}, c.Effects()...)
+}
 
-type India struct{}
+type I struct{}
 
-func (India) Mode() ExecutionMode               { return ModeSequential }
-func (c India) Action(e *Engine, p string) error { e.StickyKeyboard.I(); return nil }
+func (I) Name() string          { return "i" }
+func (I) CalledBy() []string    { return []string{"india"} }
+func (I) Mode() ExecutionMode   { return ModeSequential }
+func (I) Effects() []EffectFunc { return nil }
+func (c I) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.I()
+		return nil
+	}, c.Effects()...)
+}
 
-type Juliet struct{}
+type J struct{}
 
-func (Juliet) Mode() ExecutionMode               { return ModeSequential }
-func (c Juliet) Action(e *Engine, p string) error { e.StickyKeyboard.J(); return nil }
+func (J) Name() string          { return "j" }
+func (J) CalledBy() []string    { return []string{"juliet"} }
+func (J) Mode() ExecutionMode   { return ModeSequential }
+func (J) Effects() []EffectFunc { return nil }
+func (c J) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.J()
+		return nil
+	}, c.Effects()...)
+}
 
-type Kilo struct{}
+type K struct{}
 
-func (Kilo) Mode() ExecutionMode               { return ModeSequential }
-func (c Kilo) Action(e *Engine, p string) error { e.StickyKeyboard.K(); return nil }
+func (K) Name() string          { return "k" }
+func (K) CalledBy() []string    { return []string{"kilo"} }
+func (K) Mode() ExecutionMode   { return ModeSequential }
+func (K) Effects() []EffectFunc { return nil }
+func (c K) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.K()
+		return nil
+	}, c.Effects()...)
+}
 
-type Lima struct{}
+type L struct{}
 
-func (Lima) Mode() ExecutionMode               { return ModeSequential }
-func (c Lima) Action(e *Engine, p string) error { e.StickyKeyboard.L(); return nil }
+func (L) Name() string          { return "l" }
+func (L) CalledBy() []string    { return []string{"lima"} }
+func (L) Mode() ExecutionMode   { return ModeSequential }
+func (L) Effects() []EffectFunc { return nil }
+func (c L) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.L()
+		return nil
+	}, c.Effects()...)
+}
 
-type Mike struct{}
+type M struct{}
 
-func (Mike) Mode() ExecutionMode               { return ModeSequential }
-func (c Mike) Action(e *Engine, p string) error { e.StickyKeyboard.M(); return nil }
+func (M) Name() string          { return "m" }
+func (M) CalledBy() []string    { return []string{"mike"} }
+func (M) Mode() ExecutionMode   { return ModeSequential }
+func (M) Effects() []EffectFunc { return nil }
+func (c M) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.M()
+		return nil
+	}, c.Effects()...)
+}
 
-type November struct{}
+type N struct{}
 
-func (November) Mode() ExecutionMode               { return ModeSequential }
-func (c November) Action(e *Engine, p string) error { e.StickyKeyboard.N(); return nil }
+func (N) Name() string          { return "n" }
+func (N) CalledBy() []string    { return []string{"november"} }
+func (N) Mode() ExecutionMode   { return ModeSequential }
+func (N) Effects() []EffectFunc { return nil }
+func (c N) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.N()
+		return nil
+	}, c.Effects()...)
+}
 
-type Oscar struct{}
+type O struct{}
 
-func (Oscar) Mode() ExecutionMode               { return ModeSequential }
-func (c Oscar) Action(e *Engine, p string) error { e.StickyKeyboard.O(); return nil }
+func (O) Name() string          { return "o" }
+func (O) CalledBy() []string    { return []string{"oscar"} }
+func (O) Mode() ExecutionMode   { return ModeSequential }
+func (O) Effects() []EffectFunc { return nil }
+func (c O) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.O()
+		return nil
+	}, c.Effects()...)
+}
 
-type Papa struct{}
+type P struct{}
 
-func (Papa) Mode() ExecutionMode               { return ModeSequential }
-func (c Papa) Action(e *Engine, p string) error { e.StickyKeyboard.P(); return nil }
+func (P) Name() string          { return "p" }
+func (P) CalledBy() []string    { return []string{"papa"} }
+func (P) Mode() ExecutionMode   { return ModeSequential }
+func (P) Effects() []EffectFunc { return nil }
+func (c P) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.P()
+		return nil
+	}, c.Effects()...)
+}
 
-type Quebec struct{}
+type Q struct{}
 
-func (Quebec) Mode() ExecutionMode               { return ModeSequential }
-func (c Quebec) Action(e *Engine, p string) error { e.StickyKeyboard.Q(); return nil }
+func (Q) Name() string          { return "q" }
+func (Q) CalledBy() []string    { return []string{"quebec"} }
+func (Q) Mode() ExecutionMode   { return ModeSequential }
+func (Q) Effects() []EffectFunc { return nil }
+func (c Q) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Q()
+		return nil
+	}, c.Effects()...)
+}
 
-type Romeo struct{}
+type R struct{}
 
-func (Romeo) Mode() ExecutionMode               { return ModeSequential }
-func (c Romeo) Action(e *Engine, p string) error { e.StickyKeyboard.R(); return nil }
+func (R) Name() string          { return "r" }
+func (R) CalledBy() []string    { return []string{"romeo"} }
+func (R) Mode() ExecutionMode   { return ModeSequential }
+func (R) Effects() []EffectFunc { return nil }
+func (c R) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.R()
+		return nil
+	}, c.Effects()...)
+}
 
-type Sierra struct{}
+type S struct{}
 
-func (Sierra) Mode() ExecutionMode               { return ModeSequential }
-func (c Sierra) Action(e *Engine, p string) error { e.StickyKeyboard.S(); return nil }
+func (S) Name() string          { return "s" }
+func (S) CalledBy() []string    { return []string{"sierra"} }
+func (S) Mode() ExecutionMode   { return ModeSequential }
+func (S) Effects() []EffectFunc { return nil }
+func (c S) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.S()
+		return nil
+	}, c.Effects()...)
+}
 
-type Tango struct{}
+type T struct{}
 
-func (Tango) Mode() ExecutionMode               { return ModeSequential }
-func (c Tango) Action(e *Engine, p string) error { e.StickyKeyboard.T(); return nil }
+func (T) Name() string          { return "t" }
+func (T) CalledBy() []string    { return []string{"tango"} }
+func (T) Mode() ExecutionMode   { return ModeSequential }
+func (T) Effects() []EffectFunc { return nil }
+func (c T) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.T()
+		return nil
+	}, c.Effects()...)
+}
 
-type Uniform struct{}
+type U struct{}
 
-func (Uniform) Mode() ExecutionMode               { return ModeSequential }
-func (c Uniform) Action(e *Engine, p string) error { e.StickyKeyboard.U(); return nil }
+func (U) Name() string          { return "u" }
+func (U) CalledBy() []string    { return []string{"uniform"} }
+func (U) Mode() ExecutionMode   { return ModeSequential }
+func (U) Effects() []EffectFunc { return nil }
+func (c U) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.U()
+		return nil
+	}, c.Effects()...)
+}
 
-type Victor struct{}
+type V struct{}
 
-func (Victor) Mode() ExecutionMode               { return ModeSequential }
-func (c Victor) Action(e *Engine, p string) error { e.StickyKeyboard.V(); return nil }
+func (V) Name() string          { return "v" }
+func (V) CalledBy() []string    { return []string{"victor"} }
+func (V) Mode() ExecutionMode   { return ModeSequential }
+func (V) Effects() []EffectFunc { return nil }
+func (c V) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.V()
+		return nil
+	}, c.Effects()...)
+}
 
-type Whiskey struct{}
+type W struct{}
 
-func (Whiskey) Mode() ExecutionMode               { return ModeSequential }
-func (c Whiskey) Action(e *Engine, p string) error { e.StickyKeyboard.W(); return nil }
+func (W) Name() string          { return "w" }
+func (W) CalledBy() []string    { return []string{"whiskey"} }
+func (W) Mode() ExecutionMode   { return ModeSequential }
+func (W) Effects() []EffectFunc { return nil }
+func (c W) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.W()
+		return nil
+	}, c.Effects()...)
+}
 
-type Xray struct{}
+type X struct{}
 
-func (Xray) Mode() ExecutionMode               { return ModeSequential }
-func (c Xray) Action(e *Engine, p string) error { e.StickyKeyboard.X(); return nil }
+func (X) Name() string          { return "x" }
+func (X) CalledBy() []string    { return []string{"xray"} }
+func (X) Mode() ExecutionMode   { return ModeSequential }
+func (X) Effects() []EffectFunc { return nil }
+func (c X) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.X()
+		return nil
+	}, c.Effects()...)
+}
 
-type Yankee struct{}
+type Y struct{}
 
-func (Yankee) Mode() ExecutionMode               { return ModeSequential }
-func (c Yankee) Action(e *Engine, p string) error { e.StickyKeyboard.Y(); return nil }
+func (Y) Name() string          { return "y" }
+func (Y) CalledBy() []string    { return []string{"yankee"} }
+func (Y) Mode() ExecutionMode   { return ModeSequential }
+func (Y) Effects() []EffectFunc { return nil }
+func (c Y) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Y()
+		return nil
+	}, c.Effects()...)
+}
 
-type Zulu struct{}
+type Z struct{}
 
-func (Zulu) Mode() ExecutionMode               { return ModeSequential }
-func (c Zulu) Action(e *Engine, p string) error { e.StickyKeyboard.Z(); return nil }
+func (Z) Name() string          { return "z" }
+func (Z) CalledBy() []string    { return []string{"zulu"} }
+func (Z) Mode() ExecutionMode   { return ModeSequential }
+func (Z) Effects() []EffectFunc { return nil }
+func (c Z) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Z()
+		return nil
+	}, c.Effects()...)
+}
 
 // ----------------------------------------------------------------------------
 // NUMBERS
@@ -342,53 +770,133 @@ func (c Zulu) Action(e *Engine, p string) error { e.StickyKeyboard.Z(); return n
 
 type Zero struct{}
 
-func (Zero) Mode() ExecutionMode               { return ModeSequential }
-func (c Zero) Action(e *Engine, p string) error { e.StickyKeyboard.Num0(); return nil }
+func (Zero) Name() string          { return "zero" }
+func (Zero) CalledBy() []string    { return []string{"zero"} }
+func (Zero) Mode() ExecutionMode   { return ModeSequential }
+func (Zero) Effects() []EffectFunc { return nil }
+func (c Zero) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num0()
+		return nil
+	}, c.Effects()...)
+}
 
 type One struct{}
 
-func (One) Mode() ExecutionMode               { return ModeSequential }
-func (c One) Action(e *Engine, p string) error { e.StickyKeyboard.Num1(); return nil }
+func (One) Name() string          { return "one" }
+func (One) CalledBy() []string    { return []string{"one"} }
+func (One) Mode() ExecutionMode   { return ModeSequential }
+func (One) Effects() []EffectFunc { return nil }
+func (c One) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num1()
+		return nil
+	}, c.Effects()...)
+}
 
 type Two struct{}
 
-func (Two) Mode() ExecutionMode               { return ModeSequential }
-func (c Two) Action(e *Engine, p string) error { e.StickyKeyboard.Num2(); return nil }
+func (Two) Name() string          { return "two" }
+func (Two) CalledBy() []string    { return []string{"two"} }
+func (Two) Mode() ExecutionMode   { return ModeSequential }
+func (Two) Effects() []EffectFunc { return nil }
+func (c Two) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num2()
+		return nil
+	}, c.Effects()...)
+}
 
 type Three struct{}
 
-func (Three) Mode() ExecutionMode               { return ModeSequential }
-func (c Three) Action(e *Engine, p string) error { e.StickyKeyboard.Num3(); return nil }
+func (Three) Name() string          { return "three" }
+func (Three) CalledBy() []string    { return []string{"three"} }
+func (Three) Mode() ExecutionMode   { return ModeSequential }
+func (Three) Effects() []EffectFunc { return nil }
+func (c Three) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num3()
+		return nil
+	}, c.Effects()...)
+}
 
 type Four struct{}
 
-func (Four) Mode() ExecutionMode               { return ModeSequential }
-func (c Four) Action(e *Engine, p string) error { e.StickyKeyboard.Num4(); return nil }
+func (Four) Name() string          { return "four" }
+func (Four) CalledBy() []string    { return []string{"four"} }
+func (Four) Mode() ExecutionMode   { return ModeSequential }
+func (Four) Effects() []EffectFunc { return nil }
+func (c Four) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num4()
+		return nil
+	}, c.Effects()...)
+}
 
 type Five struct{}
 
-func (Five) Mode() ExecutionMode               { return ModeSequential }
-func (c Five) Action(e *Engine, p string) error { e.StickyKeyboard.Num5(); return nil }
+func (Five) Name() string          { return "five" }
+func (Five) CalledBy() []string    { return []string{"five"} }
+func (Five) Mode() ExecutionMode   { return ModeSequential }
+func (Five) Effects() []EffectFunc { return nil }
+func (c Five) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num5()
+		return nil
+	}, c.Effects()...)
+}
 
 type Six struct{}
 
-func (Six) Mode() ExecutionMode               { return ModeSequential }
-func (c Six) Action(e *Engine, p string) error { e.StickyKeyboard.Num6(); return nil }
+func (Six) Name() string          { return "six" }
+func (Six) CalledBy() []string    { return []string{"six"} }
+func (Six) Mode() ExecutionMode   { return ModeSequential }
+func (Six) Effects() []EffectFunc { return nil }
+func (c Six) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num6()
+		return nil
+	}, c.Effects()...)
+}
 
 type Seven struct{}
 
-func (Seven) Mode() ExecutionMode               { return ModeSequential }
-func (c Seven) Action(e *Engine, p string) error { e.StickyKeyboard.Num7(); return nil }
+func (Seven) Name() string          { return "seven" }
+func (Seven) CalledBy() []string    { return []string{"seven"} }
+func (Seven) Mode() ExecutionMode   { return ModeSequential }
+func (Seven) Effects() []EffectFunc { return nil }
+func (c Seven) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num7()
+		return nil
+	}, c.Effects()...)
+}
 
 type Eight struct{}
 
-func (Eight) Mode() ExecutionMode               { return ModeSequential }
-func (c Eight) Action(e *Engine, p string) error { e.StickyKeyboard.Num8(); return nil }
+func (Eight) Name() string          { return "eight" }
+func (Eight) CalledBy() []string    { return []string{"eight"} }
+func (Eight) Mode() ExecutionMode   { return ModeSequential }
+func (Eight) Effects() []EffectFunc { return nil }
+func (c Eight) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num8()
+		return nil
+	}, c.Effects()...)
+}
 
 type Nine struct{}
 
-func (Nine) Mode() ExecutionMode               { return ModeSequential }
-func (c Nine) Action(e *Engine, p string) error { e.StickyKeyboard.Num9(); return nil }
+func (Nine) Name() string          { return "nine" }
+func (Nine) CalledBy() []string    { return []string{"nine"} }
+func (Nine) Mode() ExecutionMode   { return ModeSequential }
+func (Nine) Effects() []EffectFunc { return nil }
+func (c Nine) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Num9()
+		return nil
+	}, c.Effects()...)
+}
 
 // ----------------------------------------------------------------------------
 // FUNCTION KEYS
@@ -396,63 +904,159 @@ func (c Nine) Action(e *Engine, p string) error { e.StickyKeyboard.Num9(); retur
 
 type FOne struct{}
 
-func (FOne) Mode() ExecutionMode               { return ModeSequential }
-func (c FOne) Action(e *Engine, p string) error { e.StickyKeyboard.F1(); return nil }
+func (FOne) Name() string          { return "f1" }
+func (FOne) CalledBy() []string    { return []string{"f1"} }
+func (FOne) Mode() ExecutionMode   { return ModeSequential }
+func (FOne) Effects() []EffectFunc { return nil }
+func (c FOne) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F1()
+		return nil
+	}, c.Effects()...)
+}
 
 type FTwo struct{}
 
-func (FTwo) Mode() ExecutionMode               { return ModeSequential }
-func (c FTwo) Action(e *Engine, p string) error { e.StickyKeyboard.F2(); return nil }
+func (FTwo) Name() string          { return "f2" }
+func (FTwo) CalledBy() []string    { return []string{"f2"} }
+func (FTwo) Mode() ExecutionMode   { return ModeSequential }
+func (FTwo) Effects() []EffectFunc { return nil }
+func (c FTwo) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F2()
+		return nil
+	}, c.Effects()...)
+}
 
 type FThree struct{}
 
-func (FThree) Mode() ExecutionMode               { return ModeSequential }
-func (c FThree) Action(e *Engine, p string) error { e.StickyKeyboard.F3(); return nil }
+func (FThree) Name() string          { return "f3" }
+func (FThree) CalledBy() []string    { return []string{"f3"} }
+func (FThree) Mode() ExecutionMode   { return ModeSequential }
+func (FThree) Effects() []EffectFunc { return nil }
+func (c FThree) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F3()
+		return nil
+	}, c.Effects()...)
+}
 
 type FFour struct{}
 
-func (FFour) Mode() ExecutionMode               { return ModeSequential }
-func (c FFour) Action(e *Engine, p string) error { e.StickyKeyboard.F4(); return nil }
+func (FFour) Name() string          { return "f4" }
+func (FFour) CalledBy() []string    { return []string{"f4"} }
+func (FFour) Mode() ExecutionMode   { return ModeSequential }
+func (FFour) Effects() []EffectFunc { return nil }
+func (c FFour) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F4()
+		return nil
+	}, c.Effects()...)
+}
 
 type FFive struct{}
 
-func (FFive) Mode() ExecutionMode               { return ModeSequential }
-func (c FFive) Action(e *Engine, p string) error { e.StickyKeyboard.F5(); return nil }
+func (FFive) Name() string          { return "f5" }
+func (FFive) CalledBy() []string    { return []string{"f5"} }
+func (FFive) Mode() ExecutionMode   { return ModeSequential }
+func (FFive) Effects() []EffectFunc { return nil }
+func (c FFive) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F5()
+		return nil
+	}, c.Effects()...)
+}
 
 type FSix struct{}
 
-func (FSix) Mode() ExecutionMode               { return ModeSequential }
-func (c FSix) Action(e *Engine, p string) error { e.StickyKeyboard.F6(); return nil }
+func (FSix) Name() string          { return "f6" }
+func (FSix) CalledBy() []string    { return []string{"f6"} }
+func (FSix) Mode() ExecutionMode   { return ModeSequential }
+func (FSix) Effects() []EffectFunc { return nil }
+func (c FSix) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F6()
+		return nil
+	}, c.Effects()...)
+}
 
 type FSeven struct{}
 
-func (FSeven) Mode() ExecutionMode               { return ModeSequential }
-func (c FSeven) Action(e *Engine, p string) error { e.StickyKeyboard.F7(); return nil }
+func (FSeven) Name() string          { return "f7" }
+func (FSeven) CalledBy() []string    { return []string{"f7"} }
+func (FSeven) Mode() ExecutionMode   { return ModeSequential }
+func (FSeven) Effects() []EffectFunc { return nil }
+func (c FSeven) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F7()
+		return nil
+	}, c.Effects()...)
+}
 
 type FEight struct{}
 
-func (FEight) Mode() ExecutionMode               { return ModeSequential }
-func (c FEight) Action(e *Engine, p string) error { e.StickyKeyboard.F8(); return nil }
+func (FEight) Name() string          { return "f8" }
+func (FEight) CalledBy() []string    { return []string{"f8"} }
+func (FEight) Mode() ExecutionMode   { return ModeSequential }
+func (FEight) Effects() []EffectFunc { return nil }
+func (c FEight) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F8()
+		return nil
+	}, c.Effects()...)
+}
 
 type FNine struct{}
 
-func (FNine) Mode() ExecutionMode               { return ModeSequential }
-func (c FNine) Action(e *Engine, p string) error { e.StickyKeyboard.F9(); return nil }
+func (FNine) Name() string          { return "f9" }
+func (FNine) CalledBy() []string    { return []string{"f9"} }
+func (FNine) Mode() ExecutionMode   { return ModeSequential }
+func (FNine) Effects() []EffectFunc { return nil }
+func (c FNine) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F9()
+		return nil
+	}, c.Effects()...)
+}
 
 type FTen struct{}
 
-func (FTen) Mode() ExecutionMode               { return ModeSequential }
-func (c FTen) Action(e *Engine, p string) error { e.StickyKeyboard.F10(); return nil }
+func (FTen) Name() string          { return "f10" }
+func (FTen) CalledBy() []string    { return []string{"f10"} }
+func (FTen) Mode() ExecutionMode   { return ModeSequential }
+func (FTen) Effects() []EffectFunc { return nil }
+func (c FTen) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F10()
+		return nil
+	}, c.Effects()...)
+}
 
 type FEleven struct{}
 
-func (FEleven) Mode() ExecutionMode               { return ModeSequential }
-func (c FEleven) Action(e *Engine, p string) error { e.StickyKeyboard.F11(); return nil }
+func (FEleven) Name() string          { return "f11" }
+func (FEleven) CalledBy() []string    { return []string{"f11"} }
+func (FEleven) Mode() ExecutionMode   { return ModeSequential }
+func (FEleven) Effects() []EffectFunc { return nil }
+func (c FEleven) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F11()
+		return nil
+	}, c.Effects()...)
+}
 
 type FTwelve struct{}
 
-func (FTwelve) Mode() ExecutionMode               { return ModeSequential }
-func (c FTwelve) Action(e *Engine, p string) error { e.StickyKeyboard.F12(); return nil }
+func (FTwelve) Name() string          { return "f12" }
+func (FTwelve) CalledBy() []string    { return []string{"f12"} }
+func (FTwelve) Mode() ExecutionMode   { return ModeSequential }
+func (FTwelve) Effects() []EffectFunc { return nil }
+func (c FTwelve) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.F12()
+		return nil
+	}, c.Effects()...)
+}
 
 // ----------------------------------------------------------------------------
 // MOUSE (Basic)
@@ -460,46 +1064,167 @@ func (c FTwelve) Action(e *Engine, p string) error { e.StickyKeyboard.F12(); ret
 
 type Click struct{}
 
-func (c Click) Name() string                     { return "click" }
-func (Click) Mode() ExecutionMode                { return ModeSequential }
-func (c Click) Action(e *Engine, p string) error { e.Mouse.Click(); return nil }
+func (c Click) Name() string        { return "click" }
+func (c Click) CalledBy() []string  { return []string{"click"} }
+func (Click) Mode() ExecutionMode   { return ModeSequential }
+func (Click) Effects() []EffectFunc { return nil }
+func (c Click) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.Mouse.Click()
+		return nil
+	}, c.Effects()...)
+}
 
-// Left represents a command to move left.
+// Left represents a command to move the mouse left.
 type Left struct{}
 
-func (Left) Mode() ExecutionMode { return ModeSequential }
+func (Left) Name() string          { return "mouse_left" }
+func (Left) CalledBy() []string    { return []string{"left"} }
+func (Left) Mode() ExecutionMode   { return ModeSequential }
+func (Left) Effects() []EffectFunc { return nil }
 func (Left) Action(e *Engine, phrase string) error {
-	// Call the mouse method defined in mouse.go
-	e.Mouse.MoveLeft()
-	return nil
+	return EffectChain(e, func() error {
+		e.Mouse.MoveLeft()
+		return nil
+	}, nil...) // nil checks are safe in spread
 }
 
-// Right represents a command to move right.
+// Right represents a command to move the mouse right.
 type Right struct{}
 
-func (Right) Mode() ExecutionMode { return ModeSequential }
+func (Right) Name() string          { return "mouse_right" }
+func (Right) CalledBy() []string    { return []string{"right"} }
+func (Right) Mode() ExecutionMode   { return ModeSequential }
+func (Right) Effects() []EffectFunc { return nil }
 func (Right) Action(e *Engine, phrase string) error {
-	// Call the mouse method defined in mouse.go
-	e.Mouse.MoveRight()
-	return nil
+	return EffectChain(e, func() error {
+		e.Mouse.MoveRight()
+		return nil
+	}, nil...)
 }
 
-// Up represents a command to move up.
+// Up represents a command to move the mouse up.
 type Up struct{}
 
-func (Up) Mode() ExecutionMode { return ModeSequential }
+func (Up) Name() string          { return "mouse_up" }
+func (Up) CalledBy() []string    { return []string{"up"} }
+func (Up) Mode() ExecutionMode   { return ModeSequential }
+func (Up) Effects() []EffectFunc { return nil }
 func (Up) Action(e *Engine, phrase string) error {
-	// Call the mouse method defined in mouse.go
-	e.Mouse.MoveUp()
-	return nil
+	return EffectChain(e, func() error {
+		e.Mouse.MoveUp()
+		return nil
+	}, nil...)
 }
 
-// Down represents a command to move down.
+// Down represents a command to move the mouse down.
 type Down struct{}
 
-func (Down) Mode() ExecutionMode { return ModeSequential }
+func (Down) Name() string          { return "mouse_down" }
+func (Down) CalledBy() []string    { return []string{"down"} }
+func (Down) Mode() ExecutionMode   { return ModeSequential }
+func (Down) Effects() []EffectFunc { return nil }
 func (Down) Action(e *Engine, phrase string) error {
-	// Call the mouse method defined in mouse.go
-	e.Mouse.MoveDown()
-	return nil
+	return EffectChain(e, func() error {
+		e.Mouse.MoveDown()
+		return nil
+	}, nil...)
+}
+
+// ----------------------------------------------------------------------------
+// TEXT FORMATTING & SPEECH
+// ----------------------------------------------------------------------------
+
+// CamelCase converts the subsequent phrase into camelCase (e.g., "myVariableName").
+type CamelCase struct{}
+
+func (CamelCase) Name() string          { return "camel_case" }
+func (CamelCase) CalledBy() []string    { return []string{"camel"} }
+func (CamelCase) Mode() ExecutionMode   { return ModeIsolated }
+func (CamelCase) Effects() []EffectFunc { return nil }
+func (c CamelCase) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		return nil
+	}, c.Effects()...)
+}
+
+// PascalCase converts the subsequent phrase into PascalCase (e.g., "MyVariableName").
+type PascalCase struct{}
+
+func (PascalCase) Name() string          { return "pascal_case" }
+func (PascalCase) CalledBy() []string    { return []string{"pascal"} }
+func (PascalCase) Mode() ExecutionMode   { return ModeIsolated }
+func (PascalCase) Effects() []EffectFunc { return nil }
+func (c PascalCase) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		return nil
+	}, c.Effects()...)
+}
+
+// SnakeCase converts the subsequent phrase into snake_case (e.g., "my_variable_name").
+type SnakeCase struct{}
+
+func (SnakeCase) Name() string          { return "snake_case" }
+func (SnakeCase) CalledBy() []string    { return []string{"snake"} }
+func (SnakeCase) Mode() ExecutionMode   { return ModeIsolated }
+func (SnakeCase) Effects() []EffectFunc { return nil }
+func (c SnakeCase) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		return nil
+	}, c.Effects()...)
+}
+
+// Say types out the subsequent phrase exactly as spoken.
+type Say struct{}
+
+func (Say) Name() string          { return "say" }
+func (Say) CalledBy() []string    { return []string{"say"} }
+func (Say) Mode() ExecutionMode   { return ModeIsolated }
+func (Say) Effects() []EffectFunc { return nil }
+func (c Say) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		return nil
+	}, c.Effects()...)
+}
+
+// ----------------------------------------------------------------------------
+// COMMAND REGISTRY
+// ----------------------------------------------------------------------------
+
+// Registry contains a slice of all available commands to be used elsewhere.
+var Registry = []Cmd{
+	// Modifiers
+	Shift{}, Control{}, Alt{}, Command{},
+
+	// Navigation
+	North{}, South{}, East{}, West{},
+
+	// Editing
+	Enter{}, Tab{}, Space{}, Back{}, Delete{}, Escape{},
+	Home{}, End{}, PageUp{}, PageDown{},
+
+	// Symbols
+	Dot{}, Comma{}, Slash{}, Backslash{}, Semi{}, Quote{},
+	Bracket{}, Closing{}, Dash{}, Equals{}, Tick{},
+
+	// Alphabet
+	A{}, B{}, C{}, D{}, E{}, F{},
+	G{}, H{}, I{}, J{}, K{}, L{},
+	M{}, N{}, O{}, P{}, Q{}, R{},
+	S{}, T{}, U{}, V{}, W{}, X{},
+	Y{}, Z{},
+
+	// Numbers
+	Zero{}, One{}, Two{}, Three{}, Four{},
+	Five{}, Six{}, Seven{}, Eight{}, Nine{},
+
+	// Function Keys
+	FOne{}, FTwo{}, FThree{}, FFour{}, FFive{}, FSix{},
+	FSeven{}, FEight{}, FNine{}, FTen{}, FEleven{}, FTwelve{},
+
+	// Mouse
+	Click{}, Left{}, Right{}, Up{}, Down{},
+
+	// Formatting
+	CamelCase{}, PascalCase{}, SnakeCase{}, Say{},
 }
