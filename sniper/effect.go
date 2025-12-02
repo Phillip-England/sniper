@@ -69,3 +69,31 @@ func KillAfter() EffectFunc {
 		return nil
 	}
 }
+
+// ClickBefore returns an EffectFunc that performs a mouse click
+// BEFORE executing the next function in the chain.
+func ClickBefore() EffectFunc {
+	return func(e *Engine, next func() error) error {
+		// Click to focus or position cursor
+		e.Mouse.DoubleClick()
+		time.Sleep(time.Millisecond * 50)
+		return next()
+	}
+}
+
+// ClickAfter returns an EffectFunc that performs a mouse click
+// AFTER executing the next function in the chain.
+func ClickAfter() EffectFunc {
+	return func(e *Engine, next func() error) error {
+		// Execute the action first
+		err := next()
+		if err != nil {
+			return err
+		}
+
+		// Click mouse after the action completes
+		e.Mouse.DoubleClick()
+		time.Sleep(time.Millisecond * 50)
+		return nil
+	}
+}

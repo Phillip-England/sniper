@@ -5,89 +5,70 @@ import (
 	"time"
 )
 
-type Engine struct {
-	// We hold pointers to the types so that the Engine references
-	// the specific instances created by their "New" functions.
-	// This preserves the state (active modifiers, mutexes) of each.
-	StickyKeyboard *StickyKeyboard
-
-	// numberPreprocessor is the internal instance responsible for converting text to digits.
-	numberPreprocessor *NumberPreprocessor
-
-	// registry maps string command names (e.g., "left") to their Cmd implementation.
-	registry map[string]Cmd
-
-	// Tokens holds the master slice of Tokens after parsing.
-	// This is the immutable sequence for the current execution cycle.
-	Tokens []Token
-
-	// RemainingTokens tracks which tokens have NOT yet been executed.
-	// This slice shrinks as Execute() iterates.
-	RemainingTokens []Token
-
-	// HandledTokens tracks which tokens HAVE been executed (or are about to be).
-	// This slice grows as Execute() iterates.
-	HandledTokens []Token
-
-	// RemainingRawWords tracks the unexecuted text as a single string.
-	// It is updated prior to token handling so commands can see what text remains.
+// EngineState holds the transient state for a single parse/execute cycle.
+type EngineState struct {
+	Tokens            []Token
+	RemainingTokens   []Token
+	HandledTokens     []Token
 	RemainingRawWords string
-
-	// TokenIndices maps the index of the Token in the Tokens slice
-	// to its original index in the RawWords slice.
-	TokenIndices []int
-
-	// RawWords holds the processed string slice of the input.
-	// We keep this so "Isolated" commands can access the text following them.
-	RawWords []string
-
-	Mouse *Mouse
-	Delay time.Duration
-
-	// LastCmd holds the most recently executed command context.
-	// It is part of the struct to avoid cluttering the Execute function.
-	LastCmd Cmd
-
-	// FirstCmdIsValid indicates if the very first word of the parsed string
-	// corresponded to a valid command in the registry.
-	FirstCmdIsValid bool
-
-	// IsOperating determines if the engine is currently allowed to execute actions.
-	// If false, the engine should halt operations.
-	IsOperating bool
+	TokenIndices      []int
+	RawWords          []string
+	LastCmd           Cmd
+	FirstCmdIsValid   bool
 }
 
-// NewEngine initializes the Engine and sets up the internal keyboard types
-// with their default safety delays and memory allocation.
-func NewEngine() *Engine {
-	e := &Engine{
-		StickyKeyboard:     NewStickyKeyboard(),
-		numberPreprocessor: NewNumberPreprocessor(),
-		registry:           make(map[string]Cmd),
-		Tokens:             make([]Token, 0),
-		RemainingTokens:    make([]Token, 0),
-		HandledTokens:      make([]Token, 0),
-		RemainingRawWords:  "",
-		TokenIndices:       make([]int, 0),
-		RawWords:           make([]string, 0),
-		Mouse:              NewMouse(),
-		Delay:              time.Microsecond * 800,
-		LastCmd:            nil,   // Explicit initialization
-		FirstCmdIsValid:    false, // Explicit initialization
-		IsOperating:        true,  // Defaults to true so the engine runs
+// Advance updates the tracking slices and strings for the current execution step.
+func (s *EngineState) Advance(i int, token Token) {
+	// 1. Update RemainingRawWords
+	if i+1 < len(s.RawWords) {
+		s.RemainingRawWords = strings.Join(s.RawWords[i+1:], " ")
+	} else {
+		s.RemainingRawWords = ""
 	}
 
-	// Register available commands dynamically from the global Registry
-	e.registerCommands()
+	// 2. Add to Handled list
+	s.HandledTokens = append(s.HandledTokens, token)
 
+	// 3. Remove from Remaining list (pop from front)
+	if len(s.RemainingTokens) > 0 {
+		s.RemainingTokens = s.RemainingTokens[1:]
+	}
+}
+
+type Engine struct {
+	StickyKeyboard *StickyKeyboard
+	registry       map[string]Cmd
+	Mouse          *Mouse
+	Delay          time.Duration
+
+	// State holds the transient data for the current command sequence.
+	State *EngineState
+
+	// LastState holds the state of the PREVIOUS successful execution.
+	// Used for the "repeat" command.
+	LastState *EngineState
+
+	IsOperating bool
+	RawInput    string
+}
+
+func NewEngine() *Engine {
+	e := &Engine{
+		StickyKeyboard: NewStickyKeyboard(),
+		registry:       make(map[string]Cmd),
+		Mouse:          NewMouse(),
+		Delay:          time.Microsecond * 800,
+		State:          nil,
+		LastState:      nil,
+		IsOperating:    true, // Fixed: Default to true
+	}
+
+	e.registerCommands()
 	return e
 }
 
-// registerCommands populates the internal map by iterating over the global Registry slice.
-// It maps the command to all of its 'CalledBy' aliases.
 func (e *Engine) registerCommands() {
 	for _, cmd := range Registry {
-		// Iterate over the slice of triggers returned by CalledBy
 		for _, trigger := range cmd.CalledBy() {
 			key := strings.ToLower(trigger)
 			e.registry[key] = cmd
@@ -95,66 +76,64 @@ func (e *Engine) registerCommands() {
 	}
 }
 
-// Parse accepts a raw input string, converts it to lowercase, splits it,
-// processes numbers, maps strings to Tokens, and stores the result.
 func (e *Engine) Parse(input string) {
-	// Reset state for the new parse
-	e.FirstCmdIsValid = false
-	e.LastCmd = nil
+	// 0. HISTORY MANAGEMENT
+	// Before we wipe e.State for the new input, we decide if we should
+	// save the current e.State into e.LastState.
+	// We only save if:
+	// 1. We have a state to save.
+	// 2. The input that generated that state was NOT "repeat".
+	//    (If we repeat "repeat", we want to execute the thing before that, not "repeat" itself).
+	if e.State != nil && !strings.Contains(strings.ToLower(e.RawInput), "repeat") {
+		e.LastState = e.State
+	}
 
-	// 0. Ensure all input is lowercase as requested.
+	e.RawInput = input
+
+	// Initialize a fresh state structure
+	s := &EngineState{
+		LastCmd:         nil,
+		FirstCmdIsValid: false,
+	}
+
 	input = strings.ToLower(input)
-
-	// 1. Split the input into individual pieces by spaces.
 	rawInput := strings.Fields(input)
 
-	// 2. Initialize the slices to store processed tokens and words.
-	e.Tokens = make([]Token, 0, len(rawInput))
-	e.TokenIndices = make([]int, 0, len(rawInput))
-	e.RawWords = make([]string, 0, len(rawInput))
+	s.Tokens = make([]Token, 0, len(rawInput))
+	s.TokenIndices = make([]int, 0, len(rawInput))
+	s.RawWords = make([]string, 0, len(rawInput))
 
-	// 3. Process words into Tokens using the Factory
 	for i, word := range rawInput {
-		// Use the TokenFactory to create the specific token type (Cmd, Number, or Raw)
-		// This handles the number preprocessing internally.
-		token := TokenFactory(word, e.registry, e.numberPreprocessor)
+		token := TokenFactory(word, e.registry)
+		s.Tokens = append(s.Tokens, token)
+		s.RawWords = append(s.RawWords, token.Literal())
+		s.TokenIndices = append(s.TokenIndices, i)
 
-		// Store the token and the raw word (processed literal)
-		e.Tokens = append(e.Tokens, token)
-		e.RawWords = append(e.RawWords, token.Literal())
-		e.TokenIndices = append(e.TokenIndices, i)
-
-		// Check validity of first command (legacy logic support)
 		if i == 0 && token.Type() == TokenTypeCmd {
-			e.FirstCmdIsValid = true
+			s.FirstCmdIsValid = true
 		}
 	}
 
-	// 4. Initialize the tracking slices.
-	// At the start of execution, Handled is empty, and Remaining is a copy of all Tokens.
-	e.HandledTokens = make([]Token, 0, len(e.Tokens))
-	e.RemainingTokens = make([]Token, len(e.Tokens))
-	copy(e.RemainingTokens, e.Tokens)
+	s.HandledTokens = make([]Token, 0, len(s.Tokens))
+	s.RemainingTokens = make([]Token, len(s.Tokens))
+	copy(s.RemainingTokens, s.Tokens)
+	s.RemainingRawWords = strings.Join(s.RawWords, " ")
 
-	// 5. Initialize RemainingRawWords with the full sentence at the start
-	e.RemainingRawWords = strings.Join(e.RawWords, " ")
+	e.State = s
 }
 
-// Execute iterates over the Tokens linearly. It delegates logic to the
-// Handle function of each token.
 func (e *Engine) Execute() error {
-	// Note: e.LastCmd was reset in Parse(), so we start fresh here unless
-	// Parse wasn't called immediately before.
+	if e.State == nil {
+		return nil
+	}
 
-	for i, token := range e.Tokens {
+	for i, token := range e.State.Tokens {
 		if !e.IsOperating {
 			break
 		}
-		// Update the internal state (tracking slices, remaining words string)
-		// before we execute the logic for this token.
-		e.UpdateInternalState(i, token)
 
-		// Execute logic
+		e.State.Advance(i, token)
+
 		stop, err := token.Handle(e, i)
 		if err != nil {
 			return err
@@ -168,23 +147,8 @@ func (e *Engine) Execute() error {
 	return nil
 }
 
-// UpdateInternalState handles the maintenance of the tracking slices and strings
-// (RemainingRawWords, HandledTokens, RemainingTokens) prior to a token's execution.
+// UpdateInternalState is kept for backward compatibility if used elsewhere,
+// but Execute() now uses State.Advance directly.
 func (e *Engine) UpdateInternalState(i int, token Token) {
-	// 1. Update RemainingRawWords
-	// We want the words AFTER the current one.
-	// If this is the last token, the remaining string is empty.
-	if i+1 < len(e.RawWords) {
-		e.RemainingRawWords = strings.Join(e.RawWords[i+1:], " ")
-	} else {
-		e.RemainingRawWords = ""
-	}
-
-	// 2. Add to Handled list
-	e.HandledTokens = append(e.HandledTokens, token)
-
-	// 3. Remove from Remaining list (pop from front)
-	if len(e.RemainingTokens) > 0 {
-		e.RemainingTokens = e.RemainingTokens[1:]
-	}
+	e.State.Advance(i, token)
 }

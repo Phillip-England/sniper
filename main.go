@@ -30,14 +30,14 @@ func main() {
 
 func runServer(engine *sniper.Engine) error {
 	app := vii.NewApp()
-	
+
 	// Removed MwCORS since everything is now on the same origin (port 8000)
-	app.Use(vii.MwLogger, vii.MwTimeout(10))
+	app.Use(vii.MwTimeout(10))
 
 	// --- Static Files & Templates ---
 	app.Static("./static")
 	app.Favicon()
-	
+
 	if err := app.Templates("./templates", nil); err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func runServer(engine *sniper.Engine) error {
 	app.At("GET /", func(w http.ResponseWriter, r *http.Request) {
 		vii.ExecuteTemplate(w, r, "index.html", nil)
 	})
-	
+
 	app.At("GET /mouse", func(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{"Locations": map[string]interface{}{}}
 		vii.ExecuteTemplate(w, r, "mouse.html", data)
@@ -74,7 +74,7 @@ func runServer(engine *sniper.Engine) error {
 
 		// 1. Parse the input string into Tokens/Commands
 		engine.Parse(req.Command)
-		
+
 		// 2. Execute the parsed tokens
 		if err := engine.Execute(); err != nil {
 			// Send error back to client

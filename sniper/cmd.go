@@ -1,5 +1,7 @@
 package sniper
 
+import "strings"
+
 // Cmd represents a voice command within the system.
 type Cmd interface {
 	// Name returns the unique string identifier for the command (e.g., "shift", "a").
@@ -150,7 +152,7 @@ func (c Tab) Action(e *Engine, p string) error {
 type Space struct{}
 
 func (Space) Name() string          { return "space" }
-func (Space) CalledBy() []string    { return []string{"space"} }
+func (Space) CalledBy() []string    { return []string{"space", "next"} }
 func (Space) Effects() []EffectFunc { return nil }
 func (c Space) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -222,7 +224,7 @@ func (c End) Action(e *Engine, p string) error {
 type PageUp struct{}
 
 func (PageUp) Name() string          { return "page_up" }
-func (PageUp) CalledBy() []string    { return []string{"page_up"} }
+func (PageUp) CalledBy() []string    { return []string{"ascend"} }
 func (PageUp) Effects() []EffectFunc { return nil }
 func (c PageUp) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -234,7 +236,7 @@ func (c PageUp) Action(e *Engine, p string) error {
 type PageDown struct{}
 
 func (PageDown) Name() string          { return "page_down" }
-func (PageDown) CalledBy() []string    { return []string{"page_down"} }
+func (PageDown) CalledBy() []string    { return []string{"descend"} }
 func (PageDown) Effects() []EffectFunc { return nil }
 func (c PageDown) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -250,7 +252,7 @@ func (c PageDown) Action(e *Engine, p string) error {
 type Dot struct{} // .
 
 func (Dot) Name() string          { return "dot" }
-func (Dot) CalledBy() []string    { return []string{"dot"} }
+func (Dot) CalledBy() []string    { return []string{"dot", "."} }
 func (Dot) Effects() []EffectFunc { return nil }
 func (c Dot) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -274,7 +276,7 @@ func (c Comma) Action(e *Engine, p string) error {
 type Slash struct{} // /
 
 func (Slash) Name() string          { return "slash" }
-func (Slash) CalledBy() []string    { return []string{"slash"} }
+func (Slash) CalledBy() []string    { return []string{"slash", "/"} }
 func (Slash) Effects() []EffectFunc { return nil }
 func (c Slash) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -346,7 +348,7 @@ func (c Closing) Action(e *Engine, p string) error {
 type Dash struct{} // -
 
 func (Dash) Name() string          { return "dash" }
-func (Dash) CalledBy() []string    { return []string{"hyphen"} }
+func (Dash) CalledBy() []string    { return []string{"dash", "-"} }
 func (Dash) Effects() []EffectFunc { return nil }
 func (c Dash) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -358,7 +360,7 @@ func (c Dash) Action(e *Engine, p string) error {
 type Equals struct{} // =
 
 func (Equals) Name() string          { return "equals" }
-func (Equals) CalledBy() []string    { return []string{"equals"} }
+func (Equals) CalledBy() []string    { return []string{"equals", "="} }
 func (Equals) Effects() []EffectFunc { return nil }
 func (c Equals) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -542,7 +544,7 @@ func (c M) Action(e *Engine, p string) error {
 type N struct{}
 
 func (N) Name() string          { return "n" }
-func (N) CalledBy() []string    { return []string{"november", "n"} }
+func (N) CalledBy() []string    { return []string{"november", "n", "in"} }
 func (N) Effects() []EffectFunc { return nil }
 func (c N) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -1039,6 +1041,27 @@ func (Down) Action(e *Engine, phrase string) error {
 // TEXT FORMATTING & SPEECH
 // ----------------------------------------------------------------------------
 
+type RawType struct{}
+
+func (RawType) Name() string          { return "raw_type" }
+func (RawType) CalledBy() []string    { return []string{"type"} }
+func (RawType) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
+func (c RawType) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// 1. Get the raw text following the "type" command
+		text := e.State.RemainingRawWords
+
+		// 2. Smash the input together (remove all spaces)
+		// e.g., "type a b c" -> "abc"
+		text = strings.ReplaceAll(text, " ", "")
+
+		// 3. Type the resulting string literal
+		e.StickyKeyboard.TypeStr(text)
+
+		return nil
+	}, c.Effects()...)
+}
+
 // CamelCase converts the subsequent phrase into camelCase (e.g., "myVariableName").
 type CamelCase struct{}
 
@@ -1048,7 +1071,7 @@ func (CamelCase) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c CamelCase) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		// Pass the remaining spoken words to the keyboard's Camel handler
-		e.StickyKeyboard.CamelCase(e.RemainingRawWords)
+		e.StickyKeyboard.CamelCase(e.State.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
@@ -1062,7 +1085,7 @@ func (PascalCase) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c PascalCase) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		// Pass the remaining spoken words to the keyboard's Pascal handler
-		e.StickyKeyboard.PascalCase(e.RemainingRawWords)
+		e.StickyKeyboard.PascalCase(e.State.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
@@ -1076,7 +1099,7 @@ func (SnakeCase) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c SnakeCase) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		// Pass the remaining spoken words to the keyboard's Snake handler
-		e.StickyKeyboard.SnakeCase(e.RemainingRawWords)
+		e.StickyKeyboard.SnakeCase(e.State.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
@@ -1090,7 +1113,7 @@ func (Say) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c Say) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		// Pass the remaining spoken words to the keyboard's Sentence handler
-		e.StickyKeyboard.Sentence(e.RemainingRawWords)
+		e.StickyKeyboard.Sentence(e.State.RemainingRawWords)
 		return nil
 	}, c.Effects()...)
 }
@@ -1103,8 +1126,8 @@ func (Number) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
 func (c Number) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		// 1. Check if there is a next token to look at
-		if len(e.RemainingTokens) > 0 {
-			nextToken := e.RemainingTokens[0]
+		if len(e.State.RemainingTokens) > 0 {
+			nextToken := e.State.RemainingTokens[0]
 
 			// 2. Check if the next token is a number
 			if nextToken.Type() == TokenTypeNumber {
@@ -1115,6 +1138,254 @@ func (c Number) Action(e *Engine, p string) error {
 
 		// If it wasn't a number, or there were no tokens left,
 		// we essentially do nothing (skip).
+		return nil
+	}, c.Effects()...)
+}
+
+// Word types the single immediate next word and ignores the rest.
+// e.g. "word git commit" -> types "git" (ignores "commit")
+type Word struct{}
+
+func (Word) Name() string          { return "word" }
+func (Word) CalledBy() []string    { return []string{"word"} }
+func (Word) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
+func (c Word) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// 1. Get the text following the "word" command
+		// e.g. "git status"
+		text := e.State.RemainingRawWords
+
+		// 2. Split the text into individual words
+		words := strings.Fields(text)
+
+		// 3. If there is at least one word, type only the first one
+		if len(words) > 0 {
+			e.StickyKeyboard.TypeStr(words[0])
+		}
+
+		return nil
+	}, c.Effects()...)
+}
+
+// ----------------------------------------------------------------------------
+// SHORTCUTS (Combos)
+// ----------------------------------------------------------------------------
+
+// Copy performs Control+C.
+type Copy struct{}
+
+func (Copy) Name() string          { return "copy" }
+func (Copy) CalledBy() []string    { return []string{"copy"} }
+func (Copy) Effects() []EffectFunc { return nil }
+func (c Copy) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control() // Hold Control
+		e.StickyKeyboard.C()       // Press C
+		return nil
+	}, c.Effects()...)
+}
+
+// Select performs Control+A (Select All).
+type Select struct{}
+
+func (Select) Name() string          { return "select" }
+func (Select) CalledBy() []string    { return []string{"select", "select all"} }
+func (Select) Effects() []EffectFunc { return nil }
+func (c Select) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control() // Hold Control
+		e.StickyKeyboard.A()       // Press A
+		return nil
+	}, c.Effects()...)
+}
+
+// Paste performs Control+V.
+type Paste struct{}
+
+func (Paste) Name() string          { return "paste" }
+func (Paste) CalledBy() []string    { return []string{"paste"} }
+func (Paste) Effects() []EffectFunc { return nil }
+func (c Paste) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control() // Hold Control
+		e.StickyKeyboard.V()       // Press V
+		return nil
+	}, c.Effects()...)
+}
+
+// Telescope performs Control+P.
+type Telescope struct{}
+
+func (Telescope) Name() string          { return "telescope" }
+func (Telescope) CalledBy() []string    { return []string{"telescope"} }
+func (Telescope) Effects() []EffectFunc { return nil }
+func (c Telescope) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control() // Hold Control
+		e.StickyKeyboard.P()       // Press P
+		return nil
+	}, c.Effects()...)
+}
+
+type Find struct{}
+
+func (Find) Name() string          { return "find" }
+func (Find) CalledBy() []string    { return []string{"find"} }
+func (Find) Effects() []EffectFunc { return []EffectFunc{ClickBefore()} }
+func (c Find) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control() // Hold Control
+		e.StickyKeyboard.F()       // Press P
+		return nil
+	}, c.Effects()...)
+}
+
+type DeleteWord struct{}
+
+func (DeleteWord) Name() string          { return "delete_word" }
+func (DeleteWord) CalledBy() []string    { return []string{"oops"} }
+func (DeleteWord) Effects() []EffectFunc { return []EffectFunc{} }
+func (c DeleteWord) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control()   // Hold Control
+		e.StickyKeyboard.Backspace() // Press P
+		return nil
+	}, c.Effects()...)
+}
+
+// Grab clicks the mouse (to focus), Selects All, and then Copies.
+type Save struct{}
+
+func (Save) Name() string       { return "yank" }
+func (Save) CalledBy() []string { return []string{"save", "safe"} }
+
+// Uses the new ClickBefore effect
+func (Save) Effects() []EffectFunc { return []EffectFunc{} }
+func (c Save) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Logic: Ctrl (Hold) -> A (Select All) -> C (Copy) -> Ctrl (Release)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.S()
+		return nil
+	}, c.Effects()...)
+}
+
+// Undo performs Control+Z.
+type Undo struct{}
+
+func (Undo) Name() string          { return "undo" }
+func (Undo) CalledBy() []string    { return []string{"undo", "reverse"} }
+func (Undo) Effects() []EffectFunc { return nil }
+func (c Undo) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Control() // Hold Control
+		e.StickyKeyboard.Z()       // Press Z
+		return nil
+	}, c.Effects()...)
+}
+
+// ----------------------------------------------------------------------------
+// ADVANCED ACTIONS (Grab & Shove)
+// ----------------------------------------------------------------------------
+
+// Grab clicks the mouse (to focus), Selects All, and then Copies.
+type Grab struct{}
+
+func (Grab) Name() string       { return "grab" }
+func (Grab) CalledBy() []string { return []string{"grab"} }
+
+// Uses the new ClickBefore effect
+func (Grab) Effects() []EffectFunc { return []EffectFunc{ClickBefore(), ClickAfter()} }
+func (c Grab) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Logic: Ctrl (Hold) -> A (Select All) -> C (Copy) -> Ctrl (Release)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.A()
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.C()
+		return nil
+	}, c.Effects()...)
+}
+
+// Grab clicks the mouse (to focus), Selects All, and then Copies.
+type Yank struct{}
+
+func (Yank) Name() string       { return "yank" }
+func (Yank) CalledBy() []string { return []string{"yank"} }
+
+// Uses the new ClickBefore effect
+func (Yank) Effects() []EffectFunc { return []EffectFunc{ClickBefore()} }
+func (c Yank) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Logic: Ctrl (Hold) -> A (Select All) -> C (Copy) -> Ctrl (Release)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.A()
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.X()
+		return nil
+	}, c.Effects()...)
+}
+
+// Shove clicks the mouse (to focus) and then Pastes.
+type Shove struct{}
+
+func (Shove) Name() string       { return "shove" }
+func (Shove) CalledBy() []string { return []string{"shove"} }
+
+// Uses the new ClickBefore effect
+func (Shove) Effects() []EffectFunc { return []EffectFunc{ClickBefore()} }
+func (c Shove) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Logic: Ctrl (Hold) -> V (Paste) -> Ctrl (Release)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.V()
+		return nil
+	}, c.Effects()...)
+}
+
+// ----------------------------------------------------------------------------
+// HISTORY COMMANDS
+// ----------------------------------------------------------------------------
+
+type Repeat struct{}
+
+func (Repeat) Name() string          { return "repeat" }
+func (Repeat) CalledBy() []string    { return []string{"repeat", "again"} }
+func (Repeat) Effects() []EffectFunc { return nil }
+func (c Repeat) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// 1. Check if we have history
+		if e.LastState == nil {
+			return nil
+		}
+
+		// 2. We need to construct a fresh state based on LastState.
+		// We cannot reuse LastState directly because 'Advance' consumes it
+		// (removes RemainingTokens). If we consume it, we can't repeat twice.
+		replayState := &EngineState{
+			Tokens:       e.LastState.Tokens,
+			TokenIndices: e.LastState.TokenIndices,
+			RawWords:     e.LastState.RawWords,
+			// Fresh tracking slices:
+			HandledTokens:   make([]Token, 0, len(e.LastState.Tokens)),
+			RemainingTokens: make([]Token, len(e.LastState.Tokens)),
+		}
+		// Copy tokens into remaining
+		copy(replayState.RemainingTokens, e.LastState.Tokens)
+		replayState.RemainingRawWords = strings.Join(e.LastState.RawWords, " ")
+
+		// 3. Swap the Engine State
+		currentState := e.State // Backup current state ("repeat")
+		e.State = replayState   // Swap in the replay
+
+		// 4. Execute (This will run the logic of the previous commands)
+		if err := e.Execute(); err != nil {
+			return err
+		}
+
+		// 5. Restore State (Optional, but good practice to leave engine clean)
+		e.State = currentState
+
 		return nil
 	}, c.Effects()...)
 }
@@ -1159,5 +1430,14 @@ var Registry = []Cmd{
 	Click{}, Left{}, Right{}, Up{}, Down{},
 
 	// Formatting
-	CamelCase{}, PascalCase{}, SnakeCase{}, Say{},
+	CamelCase{}, PascalCase{}, SnakeCase{}, Say{}, RawType{}, Word{},
+
+	// SHORTCUTS (New Combos)
+	Copy{}, Select{}, Paste{}, Telescope{}, Undo{}, Save{},
+
+	// ADVANCED ACTIONS (New Click+Combo)
+	Grab{}, Shove{}, Find{}, DeleteWord{}, Yank{},
+
+	// HISTORY
+	Repeat{},
 }

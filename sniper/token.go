@@ -23,8 +23,9 @@ type Token interface {
 }
 
 // TokenFactory takes a raw string word, processes it, and returns the appropriate Token.
-func TokenFactory(word string, registry map[string]Cmd, numberPrep *NumberPreprocessor) Token {
+func TokenFactory(word string, registry map[string]Cmd) Token {
 	// 1. Run the number preprocessor (e.g. converts "one" -> "1")
+	numberPrep := NewNumberPreprocessor()
 	processed := numberPrep.Process(word)
 
 	// 2. Check if the processed word exists in the command registry
@@ -68,7 +69,7 @@ func (t *CmdToken) Handle(e *Engine, index int) (bool, error) {
 	}
 
 	// Store this as the previous command for potential repetition
-	e.LastCmd = t.cmd
+	e.State.LastCmd = t.cmd
 	return false, nil
 }
 
@@ -84,19 +85,19 @@ func (t *NumberToken) Value() int      { return t.value }
 
 func (t *NumberToken) Handle(e *Engine, index int) (bool, error) {
 	// We only repeat if we have a valid previous command in memory
-	if e.LastCmd != nil {
+	if e.State.LastCmd != nil {
 		// The command already ran once when we encountered it.
 		// We run it (value - 1) more times.
 		if t.value > 1 {
 			for k := 0; k < t.value-1; k++ {
-				if err := e.LastCmd.Action(e, ""); err != nil {
+				if err := e.State.LastCmd.Action(e, ""); err != nil {
 					return false, err
 				}
 			}
 		}
 		// CRITICAL: Wash away the previous action.
 		// As per requirements: "left 10 10" -> The second 10 should be skipped.
-		e.LastCmd = nil
+		e.State.LastCmd = nil
 	}
 	// If LastCmd is nil, we simply ignore this number.
 	return false, nil
