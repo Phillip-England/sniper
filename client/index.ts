@@ -53,6 +53,12 @@ interface IWindow extends Window {
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
 }
 
+// Structure for the data coming from /api/commands/min
+interface CommandRegistryItem {
+  name: string;
+  called_by: string[];
+}
+
 /**
  * SECTION 2: AUDIO MANAGER CLASS
  */
@@ -209,6 +215,8 @@ class SniperCore {
   // Array to track all windows opened by this session (search, visit, and open)
   private openedWindows: Window[] = [];
 
+  // Stores all valid command triggers fetched from the backend
+  private commandTriggers: string[] = [];
 
   private state = {
     isRecording: false,
@@ -221,6 +229,32 @@ class SniperCore {
     this.ui = ui;
     this.initializeSpeechEngine();
     this.bindEvents();
+    
+    // Initialize the command array from the backend
+    this.loadCommandTriggers();
+  }
+
+  // Fetches the registry and populates this.commandTriggers
+  private async loadCommandTriggers() {
+    try {
+      const response = await fetch('/api/commands/min');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch commands: ${response.statusText}`);
+      }
+      
+      const commands = await response.json() as CommandRegistryItem[];
+      
+      // Flatten all 'called_by' arrays into a single array of strings
+      this.commandTriggers = commands.reduce((acc, cmd) => {
+        return acc.concat(cmd.called_by);
+      }, [] as string[]);
+
+      console.log(`[Sniper] Loaded ${this.commandTriggers.length} command triggers.`);
+      // console.log(this.commandTriggers); // Uncomment to see the full list
+      
+    } catch (err) {
+      console.warn("[Sniper] Could not load command registry. Command validation may be limited.", err);
+    }
   }
 
   private initializeSpeechEngine() {
@@ -265,6 +299,9 @@ class SniperCore {
     this.recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalChunk = '';
       let interimChunk = '';
+
+      // These command triggers are the names of all of the possible commands. 
+      // console.log(this.commandTriggers)
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
@@ -322,16 +359,6 @@ class SniperCore {
 private handleCommands(text: string): { capturedByCommand: boolean } {
     const command = text.toLowerCase().trim().replace(/[?!]/g, ''); 
       
-    // --- SPECIAL REPEAT LOGIC ---
-    if (command === 'again') {
-        if (this.lastCommand) {
-            console.log(`Repeating command: ${this.lastCommand}`);
-            return this.handleCommands(this.lastCommand);
-        } else {
-            return { capturedByCommand: true };
-        }
-    }
-
     if (command) {
         this.lastCommand = command;
     }

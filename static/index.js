@@ -124,6 +124,7 @@ class SniperCore {
   recognition = null;
   lastCommand = "";
   openedWindows = [];
+  commandTriggers = [];
   state = {
     isRecording: false,
     isLogging: true,
@@ -134,6 +135,22 @@ class SniperCore {
     this.ui = ui;
     this.initializeSpeechEngine();
     this.bindEvents();
+    this.loadCommandTriggers();
+  }
+  async loadCommandTriggers() {
+    try {
+      const response = await fetch("/api/commands/min");
+      if (!response.ok) {
+        throw new Error(`Failed to fetch commands: ${response.statusText}`);
+      }
+      const commands = await response.json();
+      this.commandTriggers = commands.reduce((acc, cmd) => {
+        return acc.concat(cmd.called_by);
+      }, []);
+      console.log(`[Sniper] Loaded ${this.commandTriggers.length} command triggers.`);
+    } catch (err) {
+      console.warn("[Sniper] Could not load command registry. Command validation may be limited.", err);
+    }
   }
   initializeSpeechEngine() {
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -216,14 +233,6 @@ class SniperCore {
   }
   handleCommands(text) {
     const command = text.toLowerCase().trim().replace(/[?!]/g, "");
-    if (command === "again") {
-      if (this.lastCommand) {
-        console.log(`Repeating command: ${this.lastCommand}`);
-        return this.handleCommands(this.lastCommand);
-      } else {
-        return { capturedByCommand: true };
-      }
-    }
     if (command) {
       this.lastCommand = command;
     }
