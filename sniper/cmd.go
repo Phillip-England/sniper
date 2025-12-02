@@ -1095,6 +1095,30 @@ func (c Say) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
+type Number struct{}
+
+func (Number) Name() string          { return "number" }
+func (Number) CalledBy() []string    { return []string{"number"} }
+func (Number) Effects() []EffectFunc { return []EffectFunc{KillAfter()} }
+func (c Number) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// 1. Check if there is a next token to look at
+		if len(e.RemainingTokens) > 0 {
+			nextToken := e.RemainingTokens[0]
+
+			// 2. Check if the next token is a number
+			if nextToken.Type() == TokenTypeNumber {
+				// 3. Manually type out the number literal
+				e.StickyKeyboard.TypeStr(nextToken.Literal())
+			}
+		}
+
+		// If it wasn't a number, or there were no tokens left,
+		// we essentially do nothing (skip).
+		return nil
+	}, c.Effects()...)
+}
+
 // ----------------------------------------------------------------------------
 // COMMAND REGISTRY
 // ----------------------------------------------------------------------------
@@ -1123,6 +1147,7 @@ var Registry = []Cmd{
 	Y{}, Z{},
 
 	// Numbers
+	Number{},
 	Zero{}, One{}, Two{}, Three{}, Four{},
 	Five{}, Six{}, Seven{}, Eight{}, Nine{},
 
