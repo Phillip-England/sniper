@@ -1,34 +1,4 @@
-// client/index.ts
-class AudioManager {
-  sounds;
-  constructor() {
-    this.sounds = {
-      "sniper-on": new Audio("/static/on.wav"),
-      "sniper-off": new Audio("/static/off.wav"),
-      "sniper-exit": new Audio("/static/exit.wav"),
-      "sniper-clear": new Audio("/static/clear.wav"),
-      "sniper-copy": new Audio("/static/copy.wav"),
-      "sniper-search": new Audio("/static/search.wav"),
-      "sniper-visit": new Audio("/static/visit.wav"),
-      click: new Audio("/static/click.wav")
-    };
-    this.preloadSounds();
-  }
-  preloadSounds() {
-    Object.values(this.sounds).forEach((sound) => {
-      sound.preload = "auto";
-      sound.load();
-    });
-  }
-  play(type) {
-    const audio = this.sounds[type];
-    audio.currentTime = 0;
-    audio.play().catch((e) => {
-      console.warn(`Audio playback failed for ${type}`, e);
-    });
-  }
-}
-
+// client/UIManager.ts
 class UIManager {
   btn;
   transcriptEl;
@@ -118,6 +88,38 @@ class UIManager {
   }
 }
 
+// client/AudioManager.ts
+class AudioManager {
+  sounds;
+  constructor() {
+    this.sounds = {
+      "sniper-on": new Audio("/static/on.wav"),
+      "sniper-off": new Audio("/static/off.wav"),
+      "sniper-exit": new Audio("/static/exit.wav"),
+      "sniper-clear": new Audio("/static/clear.wav"),
+      "sniper-copy": new Audio("/static/copy.wav"),
+      "sniper-search": new Audio("/static/search.wav"),
+      "sniper-visit": new Audio("/static/visit.wav"),
+      click: new Audio("/static/click.wav")
+    };
+    this.preloadSounds();
+  }
+  preloadSounds() {
+    Object.values(this.sounds).forEach((sound) => {
+      sound.preload = "auto";
+      sound.load();
+    });
+  }
+  play(type) {
+    const audio = this.sounds[type];
+    audio.currentTime = 0;
+    audio.play().catch((e) => {
+      console.warn(`Audio playback failed for ${type}`, e);
+    });
+  }
+}
+
+// client/SniperCore.ts
 class SniperCore {
   audio;
   ui;
@@ -283,6 +285,8 @@ class SniperCore {
     this.recognition?.stop();
   }
 }
+
+// client/index.ts
 document.addEventListener("DOMContentLoaded", () => {
   const audioManager = new AudioManager;
   const uiManager = new UIManager;
