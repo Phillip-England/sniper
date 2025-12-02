@@ -13,6 +13,7 @@ type NumberPreprocessor struct {
 	singleNumberRegex   *regexp.Regexp
 	currencyRegex       *regexp.Regexp
 	commaRegex          *regexp.Regexp
+	hyphenRegex         *regexp.Regexp // Added for phone numbers/ID strings
 	ordinalRegex        *regexp.Regexp
 
 	// Maps for text-to-digit conversion
@@ -60,6 +61,9 @@ func NewNumberPreprocessor() *NumberPreprocessor {
 
 	// Regex to find commas surrounded by digits (e.g., 1,000)
 	np.commaRegex = regexp.MustCompile(`(\d),(\d)`)
+
+	// Regex to find hyphens surrounded by digits (e.g., 555-0199)
+	np.hyphenRegex = regexp.MustCompile(`(\d)-(\d)`)
 
 	// Regex to find ordinal suffixes attached to digits (e.g., 1st, 2nd, 3rd, 4th, 100th)
 	// (?i) = case insensitive
@@ -122,7 +126,16 @@ func (np *NumberPreprocessor) Process(input string) string {
 		processed = np.commaRegex.ReplaceAllString(processed, "$1$2")
 	}
 
-	// 5. Strip Ordinal Suffixes (1st -> 1, 2nd -> 2, 3rd -> 3, 4th -> 4)
+	// 5. Strip Hyphens (555-0199 -> 5550199)
+	// Just like commas, we loop to ensure we catch multiple hyphens (e.g. 1-800-555-0199)
+	for {
+		if !np.hyphenRegex.MatchString(processed) {
+			break
+		}
+		processed = np.hyphenRegex.ReplaceAllString(processed, "$1$2")
+	}
+
+	// 6. Strip Ordinal Suffixes (1st -> 1, 2nd -> 2, 3rd -> 3, 4th -> 4)
 	// We replace the match with just the captured digit ($1)
 	processed = np.ordinalRegex.ReplaceAllString(processed, "$1")
 

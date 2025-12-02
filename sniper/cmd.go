@@ -1000,7 +1000,7 @@ func (Left) Action(e *Engine, phrase string) error {
 type Right struct{}
 
 func (Right) Name() string          { return "mouse_right" }
-func (Right) CalledBy() []string    { return []string{"right"} }
+func (Right) CalledBy() []string    { return []string{"right", "write"} }
 func (Right) Effects() []EffectFunc { return nil }
 func (Right) Action(e *Engine, phrase string) error {
 	return EffectChain(e, func() error {
