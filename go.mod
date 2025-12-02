@@ -1,4 +1,4 @@
-module github.com/phillip-england/sniper-speech
+module github.com/phillip-england/sniper
 
 go 1.25.3
 

@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/Phillip-England/vii"
-	"github.com/phillip-england/sniper-speech/sniper"
+	"github.com/phillip-england/sniper/sniper"
 )
 
 // --- CONFIGURATION ---
