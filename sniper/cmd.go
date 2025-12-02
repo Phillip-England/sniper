@@ -1,6 +1,11 @@
 package sniper
 
-import "strings"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Cmd represents a voice command within the system.
 type Cmd interface {
@@ -1343,6 +1348,44 @@ func (c Shove) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
+// Shove clicks the mouse (to focus) and then Pastes.
+type Bottom struct{}
+
+func (Bottom) Name() string       { return "bottom" }
+func (Bottom) CalledBy() []string { return []string{"bottom"} }
+
+// Uses the new ClickBefore effect
+func (Bottom) Effects() []EffectFunc { return []EffectFunc{ClickBefore()} }
+func (c Bottom) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Logic: Ctrl (Hold) -> V (Paste) -> Ctrl (Release)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.A()
+		time.Sleep(time.Millisecond * 5)
+		e.StickyKeyboard.Down()
+		return nil
+	}, c.Effects()...)
+}
+
+// Shove clicks the mouse (to focus) and then Pastes.
+type Top struct{}
+
+func (Top) Name() string       { return "top" }
+func (Top) CalledBy() []string { return []string{"top"} }
+
+// Uses the new ClickBefore effect
+func (Top) Effects() []EffectFunc { return []EffectFunc{ClickBefore()} }
+func (c Top) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Logic: Ctrl (Hold) -> V (Paste) -> Ctrl (Release)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.A()
+		time.Sleep(time.Millisecond * 5)
+		e.StickyKeyboard.Up()
+		return nil
+	}, c.Effects()...)
+}
+
 // ----------------------------------------------------------------------------
 // HISTORY COMMANDS
 // ----------------------------------------------------------------------------
@@ -1386,6 +1429,41 @@ func (c Repeat) Action(e *Engine, p string) error {
 		// 5. Restore State (Optional, but good practice to leave engine clean)
 		e.State = currentState
 
+		return nil
+	}, c.Effects()...)
+}
+
+// ----------------------------------------------------------------------------
+// UTILITY COMMANDS
+// ----------------------------------------------------------------------------
+
+// Help prints the command registry in a line-by-line JSON format (NDJSON style)
+// which serves as the "minimal" readable format for the console.
+type Help struct{}
+
+func (Help) Name() string          { return "help" }
+func (Help) CalledBy() []string    { return []string{"help", "commands"} }
+func (Help) Effects() []EffectFunc { return nil }
+func (c Help) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		fmt.Println("--- Command Registry (JSON Lines) ---")
+		for _, cmd := range Registry {
+			// Create simplified struct
+			simpleCmd := CmdJSON{
+				Name:     cmd.Name(),
+				CalledBy: cmd.CalledBy(),
+			}
+
+			// Marshal to minimal JSON for this specific line
+			bytes, err := json.Marshal(simpleCmd)
+			if err != nil {
+				continue
+			}
+
+			// Print the single-line JSON
+			fmt.Println(string(bytes))
+		}
+		fmt.Println("-------------------------------------")
 		return nil
 	}, c.Effects()...)
 }
@@ -1436,8 +1514,50 @@ var Registry = []Cmd{
 	Copy{}, Select{}, Paste{}, Telescope{}, Undo{}, Save{},
 
 	// ADVANCED ACTIONS (New Click+Combo)
-	Grab{}, Shove{}, Find{}, DeleteWord{}, Yank{},
+	Grab{}, Shove{}, Find{}, DeleteWord{}, Yank{}, Bottom{}, Top{},
 
 	// HISTORY
 	Repeat{},
+
+	// UTILITY
+	Help{},
+}
+
+// ----------------------------------------------------------------------------
+// JSON UTILITIES
+// ----------------------------------------------------------------------------
+
+// CmdJSON is a simplified structure used only for JSON exporting.
+// It captures the name and triggers, as Action/Effects cannot be easily serialized.
+type CmdJSON struct {
+	Name     string   `json:"name"`
+	CalledBy []string `json:"called_by"`
+}
+
+// RegistryToJSON returns the registry in two formats:
+// 1. minimal: A minified JSON string (no whitespace).
+// 2. full: A pretty-printed JSON string (indented).
+func RegistryToJSON() (minimal string, full string, err error) {
+	var export []CmdJSON
+
+	for _, cmd := range Registry {
+		export = append(export, CmdJSON{
+			Name:     cmd.Name(),
+			CalledBy: cmd.CalledBy(),
+		})
+	}
+
+	// 1. Generate Minimal (Compact) JSON
+	minBytes, err := json.Marshal(export)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 2. Generate Full (Pretty) JSON
+	fullBytes, err := json.MarshalIndent(export, "", "  ")
+	if err != nil {
+		return "", "", err
+	}
+
+	return string(minBytes), string(fullBytes), nil
 }

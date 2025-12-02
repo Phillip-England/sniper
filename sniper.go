@@ -41,23 +41,19 @@ func main() {
 func runServer(engine *sniper.Engine) error {
 	app := vii.NewApp()
 
-	// Removed MwCORS since everything is now on the same origin (port 8000)
+	// Removed MwCORS since everything is now on the same origin
 	app.Use(vii.MwTimeout(10))
 
 	// --- Static Files & Templates ---
 
-	// 1. Unwrap the "static" directory so files are served from the root of the handler
 	staticFS, err := fs.Sub(staticEmbed, "static")
 	if err != nil {
 		return err
 	}
-	// Serve static files using the embedded filesystem
 	app.StaticEmbed("/static", staticFS)
 
 	app.Favicon()
 
-	// 2. Load templates from the embedded filesystem
-	// Note: We use "templates/*.html" because the embed variable includes the "templates" folder structure
 	if err := app.TemplatesFS(templatesEmbed, "templates/*.html", nil); err != nil {
 		return err
 	}
@@ -81,28 +77,47 @@ func runServer(engine *sniper.Engine) error {
 		w.Write([]byte("Server is healthy"))
 	})
 
+	// Endpoint: Minimal JSON (Compact)
+	app.At("GET /api/commands/min", func(w http.ResponseWriter, r *http.Request) {
+		minStr, _, err := sniper.RegistryToJSON()
+		if err != nil {
+			http.Error(w, "Failed to encode registry: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(minStr))
+	})
+
+	// Endpoint: Full JSON (Pretty Printed)
+	app.At("GET /api/commands/full", func(w http.ResponseWriter, r *http.Request) {
+		_, fullStr, err := sniper.RegistryToJSON()
+		if err != nil {
+			http.Error(w, "Failed to encode registry: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(fullStr))
+	})
+
 	app.At("POST /api/data", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Command string `json:"command"`
 		}
 
-		// Decode JSON
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
-		// 1. Parse the input string into Tokens/Commands
 		engine.Parse(req.Command)
 
-		// 2. Execute the parsed tokens
 		if err := engine.Execute(); err != nil {
-			// Send error back to client
 			http.Error(w, "Execution Error: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		// Success response
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"executed"}`))
 	})
