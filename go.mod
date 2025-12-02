@@ -2,7 +2,10 @@ module github.com/phillip-england/sniper
 
 go 1.25.3
 
-require github.com/Phillip-England/vii v0.0.8
+require (
+	github.com/Phillip-England/vii v0.0.9
+	github.com/go-vgo/robotgo v0.110.8
+)
 
 require (
 	github.com/a-h/templ v0.3.857 // indirect
@@ -10,12 +13,11 @@ require (
 	github.com/ebitengine/purego v0.8.3 // indirect
 	github.com/gen2brain/shm v0.1.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/go-vgo/robotgo v0.110.8 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
 	github.com/otiai10/gosseract v2.2.1+incompatible // indirect
+	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/robotn/xgb v0.10.0 // indirect
 	github.com/robotn/xgbutil v0.10.0 // indirect

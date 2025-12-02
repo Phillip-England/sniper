@@ -1,8 +1,10 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 
@@ -15,6 +17,14 @@ import (
 const (
 	ServerPort = "8000"
 )
+
+// --- EMBEDDED FILES ---
+
+//go:embed static
+var staticEmbed embed.FS
+
+//go:embed templates
+var templatesEmbed embed.FS
 
 // --- MAIN APPLICATION ---
 
@@ -35,10 +45,20 @@ func runServer(engine *sniper.Engine) error {
 	app.Use(vii.MwTimeout(10))
 
 	// --- Static Files & Templates ---
-	app.Static("./static")
+
+	// 1. Unwrap the "static" directory so files are served from the root of the handler
+	staticFS, err := fs.Sub(staticEmbed, "static")
+	if err != nil {
+		return err
+	}
+	// Serve static files using the embedded filesystem
+	app.StaticEmbed("/static", staticFS)
+
 	app.Favicon()
 
-	if err := app.Templates("./templates", nil); err != nil {
+	// 2. Load templates from the embedded filesystem
+	// Note: We use "templates/*.html" because the embed variable includes the "templates" folder structure
+	if err := app.TemplatesFS(templatesEmbed, "templates/*.html", nil); err != nil {
 		return err
 	}
 
