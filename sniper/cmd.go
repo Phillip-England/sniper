@@ -405,7 +405,7 @@ func (c Tick) Action(e *Engine, p string) error {
 type A struct{}
 
 func (A) Name() string          { return "a" }
-func (A) CalledBy() []string    { return []string{"alpha", "a"} }
+func (A) CalledBy() []string    { return []string{"alpha"} }
 func (A) Effects() []EffectFunc { return nil }
 func (c A) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -417,7 +417,7 @@ func (c A) Action(e *Engine, p string) error {
 type B struct{}
 
 func (B) Name() string          { return "b" }
-func (B) CalledBy() []string    { return []string{"bravo", "b"} }
+func (B) CalledBy() []string    { return []string{"bravo"} }
 func (B) Effects() []EffectFunc { return nil }
 func (c B) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -429,7 +429,7 @@ func (c B) Action(e *Engine, p string) error {
 type C struct{}
 
 func (C) Name() string          { return "c" }
-func (C) CalledBy() []string    { return []string{"charlie", "c"} }
+func (C) CalledBy() []string    { return []string{"charlie"} }
 func (C) Effects() []EffectFunc { return nil }
 func (c C) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -441,7 +441,7 @@ func (c C) Action(e *Engine, p string) error {
 type D struct{}
 
 func (D) Name() string          { return "d" }
-func (D) CalledBy() []string    { return []string{"delta", "d"} }
+func (D) CalledBy() []string    { return []string{"delta"} }
 func (D) Effects() []EffectFunc { return nil }
 func (c D) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -453,7 +453,7 @@ func (c D) Action(e *Engine, p string) error {
 type E struct{}
 
 func (E) Name() string          { return "e" }
-func (E) CalledBy() []string    { return []string{"echo", "e"} }
+func (E) CalledBy() []string    { return []string{"echo"} }
 func (E) Effects() []EffectFunc { return nil }
 func (c E) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -465,7 +465,7 @@ func (c E) Action(e *Engine, p string) error {
 type F struct{}
 
 func (F) Name() string          { return "f" }
-func (F) CalledBy() []string    { return []string{"foxtrot", "f"} }
+func (F) CalledBy() []string    { return []string{"foxtrot"} }
 func (F) Effects() []EffectFunc { return nil }
 func (c F) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -477,7 +477,7 @@ func (c F) Action(e *Engine, p string) error {
 type G struct{}
 
 func (G) Name() string          { return "g" }
-func (G) CalledBy() []string    { return []string{"golf", "g"} }
+func (G) CalledBy() []string    { return []string{"golf"} }
 func (G) Effects() []EffectFunc { return nil }
 func (c G) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -489,7 +489,7 @@ func (c G) Action(e *Engine, p string) error {
 type H struct{}
 
 func (H) Name() string          { return "h" }
-func (H) CalledBy() []string    { return []string{"hotel", "h"} }
+func (H) CalledBy() []string    { return []string{"hotel"} }
 func (H) Effects() []EffectFunc { return nil }
 func (c H) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -501,7 +501,7 @@ func (c H) Action(e *Engine, p string) error {
 type I struct{}
 
 func (I) Name() string          { return "i" }
-func (I) CalledBy() []string    { return []string{"india", "i"} }
+func (I) CalledBy() []string    { return []string{"india"} }
 func (I) Effects() []EffectFunc { return nil }
 func (c I) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -513,7 +513,7 @@ func (c I) Action(e *Engine, p string) error {
 type J struct{}
 
 func (J) Name() string          { return "j" }
-func (J) CalledBy() []string    { return []string{"juliet", "j"} }
+func (J) CalledBy() []string    { return []string{"juliet"} }
 func (J) Effects() []EffectFunc { return nil }
 func (c J) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -525,7 +525,7 @@ func (c J) Action(e *Engine, p string) error {
 type K struct{}
 
 func (K) Name() string          { return "k" }
-func (K) CalledBy() []string    { return []string{"kilo", "k"} }
+func (K) CalledBy() []string    { return []string{"kilo"} }
 func (K) Effects() []EffectFunc { return nil }
 func (c K) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -537,7 +537,7 @@ func (c K) Action(e *Engine, p string) error {
 type L struct{}
 
 func (L) Name() string          { return "l" }
-func (L) CalledBy() []string    { return []string{"lima", "l"} }
+func (L) CalledBy() []string    { return []string{"lima"} }
 func (L) Effects() []EffectFunc { return nil }
 func (c L) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -549,7 +549,7 @@ func (c L) Action(e *Engine, p string) error {
 type M struct{}
 
 func (M) Name() string          { return "m" }
-func (M) CalledBy() []string    { return []string{"mike", "m"} }
+func (M) CalledBy() []string    { return []string{"mike"} }
 func (M) Effects() []EffectFunc { return nil }
 func (c M) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -561,7 +561,7 @@ func (c M) Action(e *Engine, p string) error {
 type N struct{}
 
 func (N) Name() string          { return "n" }
-func (N) CalledBy() []string    { return []string{"november", "n", "in"} }
+func (N) CalledBy() []string    { return []string{"november"} }
 func (N) Effects() []EffectFunc { return nil }
 func (c N) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -573,7 +573,7 @@ func (c N) Action(e *Engine, p string) error {
 type O struct{}
 
 func (O) Name() string          { return "o" }
-func (O) CalledBy() []string    { return []string{"oscar", "o"} }
+func (O) CalledBy() []string    { return []string{"oscar"} }
 func (O) Effects() []EffectFunc { return nil }
 func (c O) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -585,7 +585,7 @@ func (c O) Action(e *Engine, p string) error {
 type P struct{}
 
 func (P) Name() string          { return "p" }
-func (P) CalledBy() []string    { return []string{"papa", "p"} }
+func (P) CalledBy() []string    { return []string{"papa"} }
 func (P) Effects() []EffectFunc { return nil }
 func (c P) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -597,7 +597,7 @@ func (c P) Action(e *Engine, p string) error {
 type Q struct{}
 
 func (Q) Name() string          { return "q" }
-func (Q) CalledBy() []string    { return []string{"quebec", "q"} }
+func (Q) CalledBy() []string    { return []string{"quebec"} }
 func (Q) Effects() []EffectFunc { return nil }
 func (c Q) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -609,7 +609,7 @@ func (c Q) Action(e *Engine, p string) error {
 type R struct{}
 
 func (R) Name() string          { return "r" }
-func (R) CalledBy() []string    { return []string{"romeo", "r"} }
+func (R) CalledBy() []string    { return []string{"romeo"} }
 func (R) Effects() []EffectFunc { return nil }
 func (c R) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -621,7 +621,7 @@ func (c R) Action(e *Engine, p string) error {
 type S struct{}
 
 func (S) Name() string          { return "s" }
-func (S) CalledBy() []string    { return []string{"sierra", "s"} }
+func (S) CalledBy() []string    { return []string{"sierra"} }
 func (S) Effects() []EffectFunc { return nil }
 func (c S) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -633,7 +633,7 @@ func (c S) Action(e *Engine, p string) error {
 type T struct{}
 
 func (T) Name() string          { return "t" }
-func (T) CalledBy() []string    { return []string{"tango", "t"} }
+func (T) CalledBy() []string    { return []string{"tango"} }
 func (T) Effects() []EffectFunc { return nil }
 func (c T) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -645,7 +645,7 @@ func (c T) Action(e *Engine, p string) error {
 type U struct{}
 
 func (U) Name() string          { return "u" }
-func (U) CalledBy() []string    { return []string{"uniform", "u"} }
+func (U) CalledBy() []string    { return []string{"uniform"} }
 func (U) Effects() []EffectFunc { return nil }
 func (c U) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -657,7 +657,7 @@ func (c U) Action(e *Engine, p string) error {
 type V struct{}
 
 func (V) Name() string          { return "v" }
-func (V) CalledBy() []string    { return []string{"victor", "v"} }
+func (V) CalledBy() []string    { return []string{"victor"} }
 func (V) Effects() []EffectFunc { return nil }
 func (c V) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -669,7 +669,7 @@ func (c V) Action(e *Engine, p string) error {
 type W struct{}
 
 func (W) Name() string          { return "w" }
-func (W) CalledBy() []string    { return []string{"whiskey", "w"} }
+func (W) CalledBy() []string    { return []string{"whiskey"} }
 func (W) Effects() []EffectFunc { return nil }
 func (c W) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -681,7 +681,7 @@ func (c W) Action(e *Engine, p string) error {
 type X struct{}
 
 func (X) Name() string          { return "x" }
-func (X) CalledBy() []string    { return []string{"xray", "x"} }
+func (X) CalledBy() []string    { return []string{"xray"} }
 func (X) Effects() []EffectFunc { return nil }
 func (c X) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -693,7 +693,7 @@ func (c X) Action(e *Engine, p string) error {
 type Y struct{}
 
 func (Y) Name() string          { return "y" }
-func (Y) CalledBy() []string    { return []string{"yankee", "y"} }
+func (Y) CalledBy() []string    { return []string{"yankee"} }
 func (Y) Effects() []EffectFunc { return nil }
 func (c Y) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -705,135 +705,11 @@ func (c Y) Action(e *Engine, p string) error {
 type Z struct{}
 
 func (Z) Name() string          { return "z" }
-func (Z) CalledBy() []string    { return []string{"zulu", "z"} }
+func (Z) CalledBy() []string    { return []string{"zulu"} }
 func (Z) Effects() []EffectFunc { return nil }
 func (c Z) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		e.StickyKeyboard.Z()
-		return nil
-	}, c.Effects()...)
-}
-
-// ----------------------------------------------------------------------------
-// NUMBERS
-// ----------------------------------------------------------------------------
-
-type Zero struct{}
-
-func (Zero) Name() string          { return "zero" }
-func (Zero) CalledBy() []string    { return []string{"zero"} }
-func (Zero) Effects() []EffectFunc { return nil }
-func (c Zero) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num0()
-		return nil
-	}, c.Effects()...)
-}
-
-type One struct{}
-
-func (One) Name() string          { return "one" }
-func (One) CalledBy() []string    { return []string{"one"} }
-func (One) Effects() []EffectFunc { return nil }
-func (c One) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num1()
-		return nil
-	}, c.Effects()...)
-}
-
-type Two struct{}
-
-func (Two) Name() string          { return "two" }
-func (Two) CalledBy() []string    { return []string{"two"} }
-func (Two) Effects() []EffectFunc { return nil }
-func (c Two) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num2()
-		return nil
-	}, c.Effects()...)
-}
-
-type Three struct{}
-
-func (Three) Name() string          { return "three" }
-func (Three) CalledBy() []string    { return []string{"three"} }
-func (Three) Effects() []EffectFunc { return nil }
-func (c Three) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num3()
-		return nil
-	}, c.Effects()...)
-}
-
-type Four struct{}
-
-func (Four) Name() string          { return "four" }
-func (Four) CalledBy() []string    { return []string{"four"} }
-func (Four) Effects() []EffectFunc { return nil }
-func (c Four) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num4()
-		return nil
-	}, c.Effects()...)
-}
-
-type Five struct{}
-
-func (Five) Name() string          { return "five" }
-func (Five) CalledBy() []string    { return []string{"five"} }
-func (Five) Effects() []EffectFunc { return nil }
-func (c Five) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num5()
-		return nil
-	}, c.Effects()...)
-}
-
-type Six struct{}
-
-func (Six) Name() string          { return "six" }
-func (Six) CalledBy() []string    { return []string{"six"} }
-func (Six) Effects() []EffectFunc { return nil }
-func (c Six) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num6()
-		return nil
-	}, c.Effects()...)
-}
-
-type Seven struct{}
-
-func (Seven) Name() string          { return "seven" }
-func (Seven) CalledBy() []string    { return []string{"seven"} }
-func (Seven) Effects() []EffectFunc { return nil }
-func (c Seven) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num7()
-		return nil
-	}, c.Effects()...)
-}
-
-type Eight struct{}
-
-func (Eight) Name() string          { return "eight" }
-func (Eight) CalledBy() []string    { return []string{"eight"} }
-func (Eight) Effects() []EffectFunc { return nil }
-func (c Eight) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num8()
-		return nil
-	}, c.Effects()...)
-}
-
-type Nine struct{}
-
-func (Nine) Name() string          { return "nine" }
-func (Nine) CalledBy() []string    { return []string{"nine"} }
-func (Nine) Effects() []EffectFunc { return nil }
-func (c Nine) Action(e *Engine, p string) error {
-	return EffectChain(e, func() error {
-		e.StickyKeyboard.Num9()
 		return nil
 	}, c.Effects()...)
 }
@@ -1509,8 +1385,6 @@ var Registry = []Cmd{
 
 	// Numbers
 	Number{},
-	Zero{}, One{}, Two{}, Three{}, Four{},
-	Five{}, Six{}, Seven{}, Eight{}, Nine{},
 
 	// Function Keys
 	FOne{}, FTwo{}, FThree{}, FFour{}, FFive{}, FSix{},
