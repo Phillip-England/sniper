@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/go-vgo/robotgo"
 )
 
 // Cmd represents a voice command within the system.
@@ -1356,6 +1358,112 @@ func (c Help) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
+// Remember consumes the NEXT word and saves the current mouse position
+// to that word. Usage: "remember banana"
+type Remember struct{}
+
+func (Remember) Name() string       { return "remember" }
+func (Remember) CalledBy() []string { return []string{"remember", "mark"} }
+func (Remember) Effects() []EffectFunc {
+	// Consume the next 1 token (the name of the spot)
+	return []EffectFunc{ConsumeArgs(1)}
+}
+func (c Remember) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// 1. Validate we got an argument
+		if len(e.State.ConsumedArgs) == 0 {
+			return nil // User said "remember" but didn't say what
+		}
+
+		name := e.State.ConsumedArgs[0]
+
+		// 2. Get current position
+		e.Mouse.SyncPosition()
+
+		// 3. Save to memory
+		e.Memory.Set(name, e.Mouse.X, e.Mouse.Y)
+		fmt.Printf("Remembered spot '%s' at %d, %d\n", name, e.Mouse.X, e.Mouse.Y)
+
+		return nil
+	}, c.Effects()...)
+}
+
+// Forget consumes the NEXT word and deletes it from memory.
+// Usage: "forget banana"
+type Forget struct{}
+
+func (Forget) Name() string       { return "forget" }
+func (Forget) CalledBy() []string { return []string{"forget"} }
+func (Forget) Effects() []EffectFunc {
+	return []EffectFunc{ConsumeArgs(1)}
+}
+func (c Forget) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		if len(e.State.ConsumedArgs) == 0 {
+			return nil
+		}
+
+		name := e.State.ConsumedArgs[0]
+		e.Memory.Delete(name)
+		fmt.Printf("Forgot spot '%s'\n", name)
+
+		return nil
+	}, c.Effects()...)
+}
+
+// SpotCmd is a DYNAMIC command created by TokenFactory when a word matches a saved spot.
+// It is not in the static registry.
+type SpotCmd struct {
+	SpotName string
+	TargetX  int
+	TargetY  int
+}
+
+func NewSpotCmd(name string, x, y int) *SpotCmd {
+	return &SpotCmd{SpotName: name, TargetX: x, TargetY: y}
+}
+
+func (s *SpotCmd) Name() string          { return "goto_" + s.SpotName }
+func (s *SpotCmd) CalledBy() []string    { return []string{s.SpotName} }
+func (s *SpotCmd) Effects() []EffectFunc { return nil }
+func (s *SpotCmd) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Move mouse to the stored coordinates
+		robotgo.Move(s.TargetX, s.TargetY)
+		// Update engine mouse state
+		e.Mouse.X = s.TargetX
+		e.Mouse.Y = s.TargetY
+		return nil
+	}, nil...)
+}
+
+// ListSpots prints all saved mouse locations to the terminal.
+// Usage: "spots" or "memory"
+type ListSpots struct{}
+
+func (ListSpots) Name() string          { return "list_spots" }
+func (ListSpots) CalledBy() []string    { return []string{"spots"} }
+func (ListSpots) Effects() []EffectFunc { return nil }
+func (c ListSpots) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Header
+		fmt.Println("--- Saved Spots ---")
+
+		// Check if empty
+		if len(e.Memory.Spots) == 0 {
+			fmt.Println("(empty)")
+		}
+
+		// Print all spots formatted nicely
+		for name, spot := range e.Memory.Spots {
+			// %-12s pads the name to 12 chars for alignment
+			fmt.Printf("%-12s : %d, %d\n", name, spot.X, spot.Y)
+		}
+		fmt.Println("-------------------")
+		return nil
+	}, c.Effects()...)
+}
+
 // ----------------------------------------------------------------------------
 // COMMAND REGISTRY
 // ----------------------------------------------------------------------------
@@ -1407,6 +1515,9 @@ var Registry = []Cmd{
 
 	// UTILITY
 	Help{},
+
+	// MEMORY
+	Remember{}, Forget{}, ListSpots{},
 }
 
 // ----------------------------------------------------------------------------

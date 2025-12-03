@@ -15,6 +15,10 @@ type EngineState struct {
 	RawWords          []string
 	LastCmd           Cmd
 	FirstCmdIsValid   bool
+
+	// New fields for argument consumption
+	ConsumedArgs []string // Stores words like "banana" consumed by commands
+	SkipCount    int      // How many tokens to skip in the main loop
 }
 
 // Advance updates the tracking slices and strings for the current execution step.
@@ -39,13 +43,10 @@ type Engine struct {
 	StickyKeyboard *StickyKeyboard
 	registry       map[string]Cmd
 	Mouse          *Mouse
+	Memory         *MouseMemory // New: Persistence layer
 	Delay          time.Duration
 
-	// State holds the transient data for the current command sequence.
-	State *EngineState
-
-	// LastState holds the state of the PREVIOUS successful execution.
-	// Used for the "repeat" command.
+	State     *EngineState
 	LastState *EngineState
 
 	IsOperating bool
@@ -57,10 +58,11 @@ func NewEngine() *Engine {
 		StickyKeyboard: NewStickyKeyboard(),
 		registry:       make(map[string]Cmd),
 		Mouse:          NewMouse(),
+		Memory:         NewMouseMemory(), // Initialize Memory
 		Delay:          time.Microsecond * 800,
 		State:          nil,
 		LastState:      nil,
-		IsOperating:    true, // Fixed: Default to true
+		IsOperating:    true,
 	}
 
 	e.registerCommands()
@@ -77,23 +79,17 @@ func (e *Engine) registerCommands() {
 }
 
 func (e *Engine) Parse(input string) {
-	// 0. HISTORY MANAGEMENT
-	// Before we wipe e.State for the new input, we decide if we should
-	// save the current e.State into e.LastState.
-	// We only save if:
-	// 1. We have a state to save.
-	// 2. The input that generated that state was NOT "repeat".
-	//    (If we repeat "repeat", we want to execute the thing before that, not "repeat" itself).
 	if e.State != nil && !strings.Contains(strings.ToLower(e.RawInput), "repeat") {
 		e.LastState = e.State
 	}
 
 	e.RawInput = input
 
-	// Initialize a fresh state structure
 	s := &EngineState{
 		LastCmd:         nil,
 		FirstCmdIsValid: false,
+		ConsumedArgs:    make([]string, 0),
+		SkipCount:       0,
 	}
 
 	input = strings.ToLower(input)
@@ -104,7 +100,8 @@ func (e *Engine) Parse(input string) {
 	s.RawWords = make([]string, 0, len(rawInput))
 
 	for i, word := range rawInput {
-		token := TokenFactory(word, e.registry)
+		// Pass e.Memory to TokenFactory so we can recognize saved spots
+		token := TokenFactory(word, e.registry, e.Memory)
 		s.Tokens = append(s.Tokens, token)
 		s.RawWords = append(s.RawWords, token.Literal())
 		s.TokenIndices = append(s.TokenIndices, i)
@@ -132,6 +129,14 @@ func (e *Engine) Execute() error {
 			break
 		}
 
+		// 1. Check if we need to skip this token (because it was consumed as an argument)
+		if e.State.SkipCount > 0 {
+			e.State.SkipCount--
+			// We still need to advance internal state tracking for accuracy
+			e.State.Advance(i, token)
+			continue
+		}
+
 		e.State.Advance(i, token)
 
 		stop, err := token.Handle(e, i)
@@ -147,8 +152,6 @@ func (e *Engine) Execute() error {
 	return nil
 }
 
-// UpdateInternalState is kept for backward compatibility if used elsewhere,
-// but Execute() now uses State.Advance directly.
 func (e *Engine) UpdateInternalState(i int, token Token) {
 	e.State.Advance(i, token)
 }

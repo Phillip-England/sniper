@@ -23,12 +23,13 @@ type Token interface {
 }
 
 // TokenFactory takes a raw string word, processes it, and returns the appropriate Token.
-func TokenFactory(word string, registry map[string]Cmd) Token {
-	// 1. Run the number preprocessor (e.g. converts "one" -> "1")
+// UPDATED: Now accepts MouseMemory to check for dynamic spots.
+func TokenFactory(word string, registry map[string]Cmd, memory *MouseMemory) Token {
+	// 1. Run the number preprocessor
 	numberPrep := NewNumberPreprocessor()
 	processed := numberPrep.Process(word)
 
-	// 2. Check if the processed word exists in the command registry
+	// 2. Check Registry (Static Commands)
 	if cmd, ok := registry[processed]; ok {
 		return &CmdToken{
 			cmd:     cmd,
@@ -36,7 +37,16 @@ func TokenFactory(word string, registry map[string]Cmd) Token {
 		}
 	}
 
-	// 3. Check if it is a number
+	// 3. Check Mouse Memory (Dynamic Spots)
+	// If the word matches a saved spot, we create a dynamic command to move there.
+	if spot, ok := memory.Get(processed); ok {
+		return &CmdToken{
+			cmd:     NewSpotCmd(processed, spot.X, spot.Y),
+			literal: processed,
+		}
+	}
+
+	// 4. Check Number
 	if val, err := strconv.Atoi(processed); err == nil {
 		return &NumberToken{
 			value:   val,
@@ -44,7 +54,7 @@ func TokenFactory(word string, registry map[string]Cmd) Token {
 		}
 	}
 
-	// 4. Default to Raw token
+	// 5. Default to Raw token
 	return &RawToken{
 		literal: processed,
 	}

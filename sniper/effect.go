@@ -97,3 +97,32 @@ func ClickAfter() EffectFunc {
 		return nil
 	}
 }
+
+// ConsumeArgs looks ahead n tokens, stores their string literals in e.State.ConsumedArgs,
+// and tells the Engine to skip processing them as commands.
+func ConsumeArgs(n int) EffectFunc {
+	return func(e *Engine, next func() error) error {
+		// 1. Check availability
+		if len(e.State.RemainingTokens) < n {
+			// Not enough tokens to consume.
+			// We can either error out or just ignore.
+			// For robustness, let's just proceed without consuming if missing.
+			return next()
+		}
+
+		// 2. Clear previous args to be safe
+		e.State.ConsumedArgs = make([]string, 0, n)
+
+		// 3. Consume
+		for i := 0; i < n; i++ {
+			// Grab literal of the next token
+			val := e.State.RemainingTokens[i].Literal()
+			e.State.ConsumedArgs = append(e.State.ConsumedArgs, val)
+		}
+
+		// 4. Instruct Engine to skip execution of these tokens
+		e.State.SkipCount = n
+
+		return next()
+	}
+}
