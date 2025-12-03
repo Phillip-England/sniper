@@ -125,8 +125,9 @@ class SniperCore {
   ui;
   recognition = null;
   lastCommand = "";
-  openedWindows = [];
   commandTriggers = [];
+  silenceTimer = null;
+  currentInterim = "";
   state = {
     isRecording: false,
     isLogging: true,
@@ -187,6 +188,10 @@ class SniperCore {
       this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
     };
     this.recognition.onresult = (event) => {
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
       let finalChunk = "";
       let interimChunk = "";
       for (let i = event.resultIndex;i < event.results.length; ++i) {
@@ -202,14 +207,18 @@ class SniperCore {
           interimChunk += alternative.transcript;
         }
       }
+      this.currentInterim = interimChunk;
       if (finalChunk) {
-        this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
-        const processed = this.handleCommands(finalChunk);
-        if (!processed.capturedByCommand && this.state.isLogging) {
-          this.audio.play("click");
-        }
+        this.executeFinalSequence(finalChunk, interimChunk);
       } else {
         this.ui.updateText("", interimChunk, this.state.isLogging);
+        if (interimChunk.trim().length > 0) {
+          this.silenceTimer = setTimeout(() => {
+            console.log("[Sniper] Force finalizing stuck interim result...");
+            this.executeFinalSequence(this.currentInterim, "");
+            this.currentInterim = "";
+          }, 1000);
+        }
       }
     };
     this.recognition.onerror = (event) => {
@@ -218,6 +227,13 @@ class SniperCore {
         this.stop();
       }
     };
+  }
+  executeFinalSequence(finalText, interimText) {
+    this.ui.updateText(finalText, interimText, this.state.isLogging);
+    const processed = this.handleCommands(finalText);
+    if (!processed.capturedByCommand && this.state.isLogging) {
+      this.audio.play("click");
+    }
   }
   async sendToBackend(command) {
     try {

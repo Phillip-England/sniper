@@ -74,12 +74,12 @@ export class SniperCore {
   
   // Track the very last command executed for the 'repeat' functionality
   private lastCommand: string = '';
-
-  // Array to track all windows opened by this session (search, visit, and open)
-  private openedWindows: Window[] = [];
-
   // Stores all valid command triggers fetched from the backend
   private commandTriggers: string[] = [];
+
+  // --- NEW PROPERTIES FOR FREEZE FIX ---
+  private silenceTimer: any = null; 
+  private currentInterim: string = '';
 
   private state = {
     isRecording: false,
@@ -160,19 +160,20 @@ export class SniperCore {
     };
 
     this.recognition.onresult = (event: SpeechRecognitionEvent) => {
+      // 1. Clear existing timer immediately on any activity
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
+      }
+
       let finalChunk = '';
       let interimChunk = '';
 
-      // These command triggers are the names of all of the possible commands. 
-      // console.log(this.commandTriggers)
-
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
-          
         if (!result || !result.length) continue;
         const alternative = result[0];
         if (!alternative) continue;
-
         if (result.isFinal) {
           finalChunk += alternative.transcript;
         } else {
@@ -180,19 +181,25 @@ export class SniperCore {
         }
       }
 
+      // Save interim for the timer logic
+      this.currentInterim = interimChunk;
+
       if (finalChunk) {
-        // 1. Immediately update UI with the new command (replaces old command)
-        this.ui.updateText(finalChunk, interimChunk, this.state.isLogging);
-        
-        // 2. Process the command
-        const processed = this.handleCommands(finalChunk);
-        
-        // 3. Audio feedback if not a specific command
-        if (!processed.capturedByCommand && this.state.isLogging) {
-           this.audio.play('click');
-        }
+        // CASE A: Natural Final Result received
+        this.executeFinalSequence(finalChunk, interimChunk);
       } else {
+        // CASE B: Only interim results. Update UI and start debounce timer.
         this.ui.updateText('', interimChunk, this.state.isLogging);
+
+        // If we have text pending, start the 1-second timer
+        if (interimChunk.trim().length > 0) {
+            this.silenceTimer = setTimeout(() => {
+                console.log("[Sniper] Force finalizing stuck interim result...");
+                // Force execute with the stuck interim text
+                this.executeFinalSequence(this.currentInterim, ''); 
+                this.currentInterim = ''; 
+            }, 1000); 
+        }
       }
     };
 
@@ -202,6 +209,24 @@ export class SniperCore {
         this.stop();
       }
     };
+  }
+
+  /**
+   * Helper to handle the logic when a command is considered "Done"
+   * (Either by natural isFinal or by the debounce timer)
+   */
+  private executeFinalSequence(finalText: string, interimText: string) {
+    // 1. Immediately update UI with the new command (replaces old command)
+    this.ui.updateText(finalText, interimText, this.state.isLogging);
+    
+    // 2. Process the command
+    const processed = this.handleCommands(finalText);
+    
+    // 3. Audio feedback if not a specific command
+    if (!processed.capturedByCommand && this.state.isLogging) {
+       this.audio.play('click');
+    }
+    
   }
 
   private async sendToBackend(command: string) {
@@ -219,7 +244,7 @@ export class SniperCore {
     }
   }
 
-private handleCommands(text: string): { capturedByCommand: boolean } {
+  private handleCommands(text: string): { capturedByCommand: boolean } {
     const command = text.toLowerCase().trim().replace(/[?!]/g, ''); 
       
     if (command) {
@@ -255,8 +280,6 @@ private handleCommands(text: string): { capturedByCommand: boolean } {
       return { capturedByCommand: false };
     }
   }
-
-
 
   private bindEvents() {
     const btn = this.ui.getRecordButton();

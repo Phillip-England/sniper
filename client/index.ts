@@ -3,7 +3,6 @@
 import { UIManager } from "./UIManager";
 import { AudioManager } from "./AudioManager";
 import { SniperCore } from "./SniperCore";
-
 /**
  * SECTION 5: INITIALIZATION
  */

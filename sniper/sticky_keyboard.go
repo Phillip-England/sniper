@@ -288,6 +288,7 @@ func (k *StickyKeyboard) Slash()        { k.executeTap("/") }
 func (k *StickyKeyboard) Backslash()    { k.executeTap("\\") }
 func (k *StickyKeyboard) Semicolon()    { k.executeTap(";") }
 func (k *StickyKeyboard) Quote()        { k.executeTap("'") }
+func (k *StickyKeyboard) DoubleQuote()  { k.executeTap("\"") }
 func (k *StickyKeyboard) BracketLeft()  { k.executeTap("[") }
 func (k *StickyKeyboard) BracketRight() { k.executeTap("]") }
 func (k *StickyKeyboard) Minus()        { k.executeTap("-") }

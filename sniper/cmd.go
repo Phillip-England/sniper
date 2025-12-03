@@ -53,7 +53,7 @@ func (c Control) Action(e *Engine, p string) error {
 type Alt struct{}
 
 func (Alt) Name() string          { return "alt" }
-func (Alt) CalledBy() []string    { return []string{"alt"} }
+func (Alt) CalledBy() []string    { return []string{"alt", "command"} }
 func (Alt) Effects() []EffectFunc { return nil }
 func (c Alt) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -65,7 +65,7 @@ func (c Alt) Action(e *Engine, p string) error {
 type Command struct{}
 
 func (Command) Name() string          { return "command" }
-func (Command) CalledBy() []string    { return []string{"command"} }
+func (Command) CalledBy() []string    { return []string{""} }
 func (Command) Effects() []EffectFunc { return nil }
 func (c Command) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -133,7 +133,7 @@ func (c West) Action(e *Engine, p string) error {
 type Enter struct{}
 
 func (Enter) Name() string          { return "enter" }
-func (Enter) CalledBy() []string    { return []string{"enter"} }
+func (Enter) CalledBy() []string    { return []string{"enter", "slap"} }
 func (Enter) Effects() []EffectFunc { return nil }
 func (c Enter) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -229,7 +229,7 @@ func (c End) Action(e *Engine, p string) error {
 type PageUp struct{}
 
 func (PageUp) Name() string          { return "page_up" }
-func (PageUp) CalledBy() []string    { return []string{"ascend"} }
+func (PageUp) CalledBy() []string    { return []string{"climb"} }
 func (PageUp) Effects() []EffectFunc { return nil }
 func (c PageUp) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -241,7 +241,7 @@ func (c PageUp) Action(e *Engine, p string) error {
 type PageDown struct{}
 
 func (PageDown) Name() string          { return "page_down" }
-func (PageDown) CalledBy() []string    { return []string{"descend"} }
+func (PageDown) CalledBy() []string    { return []string{"drop"} }
 func (PageDown) Effects() []EffectFunc { return nil }
 func (c PageDown) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -317,9 +317,21 @@ func (c Semi) Action(e *Engine, p string) error {
 type Quote struct{} // '
 
 func (Quote) Name() string          { return "quote" }
-func (Quote) CalledBy() []string    { return []string{"quote"} }
+func (Quote) CalledBy() []string    { return []string{"single"} }
 func (Quote) Effects() []EffectFunc { return nil }
 func (c Quote) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Quote()
+		return nil
+	}, c.Effects()...)
+}
+
+type DoubleQuote struct{} // '
+
+func (DoubleQuote) Name() string          { return "double_quote" }
+func (DoubleQuote) CalledBy() []string    { return []string{"double"} }
+func (DoubleQuote) Effects() []EffectFunc { return nil }
+func (c DoubleQuote) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
 		e.StickyKeyboard.Quote()
 		return nil
