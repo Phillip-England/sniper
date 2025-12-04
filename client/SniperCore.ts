@@ -85,7 +85,7 @@ export class SniperCore {
     isRecording: false,
     isLogging: true,
     shouldContinue: false
-  };
+  }; 
 
   constructor(audio: AudioManager, ui: UIManager) {
     this.audio = audio;
@@ -232,7 +232,7 @@ export class SniperCore {
   private async sendToBackend(command: string) {
     try {
       console.log(`[Sniper] Sending to backend: ${command}`);
-      await fetch('http://localhost:8000/api/data', { 
+      await fetch('http://localhost:9090/api/data', { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -240,7 +240,7 @@ export class SniperCore {
         body: JSON.stringify({ command: command })
       });
     } catch (err) {
-      console.warn('[Sniper] Backend connection failed. Is localhost:8000 running?');
+      console.warn('[Sniper] Backend connection failed. Is localhost:9090 running?');
     }
   }
 

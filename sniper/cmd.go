@@ -1239,6 +1239,28 @@ func (c Shove) Action(e *Engine, p string) error {
 }
 
 // Shove clicks the mouse (to focus) and then Pastes.
+type Replace struct{}
+
+func (Replace) Name() string       { return "replace" }
+func (Replace) CalledBy() []string { return []string{"replace"} }
+
+// Uses the new ClickBefore effect
+func (Replace) Effects() []EffectFunc { return []EffectFunc{ClickBefore()} }
+func (c Replace) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		// Logic: Ctrl (Hold) -> V (Paste) -> Ctrl (Release)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.A()
+		time.Sleep(time.Millisecond * 2)
+		e.StickyKeyboard.Backspace()
+		time.Sleep(time.Millisecond * 2)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.V()
+		return nil
+	}, c.Effects()...)
+}
+
+// Shove clicks the mouse (to focus) and then Pastes.
 type Bottom struct{}
 
 func (Bottom) Name() string       { return "bottom" }
@@ -1508,7 +1530,7 @@ var Registry = []Cmd{
 	Copy{}, Select{}, Paste{}, Telescope{}, Undo{}, Save{},
 
 	// ADVANCED ACTIONS (New Click+Combo)
-	Grab{}, Shove{}, Find{}, DeleteWord{}, Yank{}, Bottom{}, Top{},
+	Grab{}, Shove{}, Find{}, DeleteWord{}, Yank{}, Bottom{}, Top{}, Replace{},
 
 	// HISTORY
 	Repeat{},

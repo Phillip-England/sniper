@@ -238,7 +238,7 @@ class SniperCore {
   async sendToBackend(command) {
     try {
       console.log(`[Sniper] Sending to backend: ${command}`);
-      await fetch("http://localhost:8000/api/data", {
+      await fetch("http://localhost:9090/api/data", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -246,7 +246,7 @@ class SniperCore {
         body: JSON.stringify({ command })
       });
     } catch (err) {
-      console.warn("[Sniper] Backend connection failed. Is localhost:8000 running?");
+      console.warn("[Sniper] Backend connection failed. Is localhost:9090 running?");
     }
   }
   handleCommands(text) {

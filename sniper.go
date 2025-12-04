@@ -15,7 +15,7 @@ import (
 // --- CONFIGURATION ---
 
 const (
-	ServerPort = "8000"
+	ServerPort = "9090"
 )
 
 // --- EMBEDDED FILES ---
