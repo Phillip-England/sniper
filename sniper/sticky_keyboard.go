@@ -62,7 +62,7 @@ func (k *StickyKeyboard) queueModifier(key string) {
 		}
 	}
 
-	// Prevent duplicates (e.g., calling Shift twice shouldn't add it twice)
+	// Prevent duplicates
 	for _, m := range k.pendingModifiers {
 		if m == normalizedKey {
 			return
@@ -74,8 +74,6 @@ func (k *StickyKeyboard) queueModifier(key string) {
 }
 
 // executeTap performs the actual robotgo action.
-// It applies all pending modifiers, taps the target key, and then
-// explicitly ensures all modifiers are released.
 func (k *StickyKeyboard) executeTap(key string) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -96,8 +94,6 @@ func (k *StickyKeyboard) executeTap(key string) {
 	robotgo.KeyTap(key, args...)
 
 	// EXPLICIT SAFETY RELEASE
-	// Even though KeyTap attempts to release modifiers, we explicitly
-	// force a KeyUp on every pending modifier to prevent "stuck key" states.
 	for _, mod := range k.pendingModifiers {
 		robotgo.KeyUp(mod)
 	}
@@ -105,24 +101,22 @@ func (k *StickyKeyboard) executeTap(key string) {
 	// Clear memory immediately after execution
 	k.pendingModifiers = []string{}
 
-	// CRITICAL: The small delay requested to ensure OS registers the release
+	// Ensure OS registers the release
 	time.Sleep(k.PostReleaseDelay)
 }
 
 // ----------------------------------------------------------------------------
 // MODIFIER METHODS
-// Calling these does NOT press the key immediately. It adds them to memory.
 // ----------------------------------------------------------------------------
 
 func (k *StickyKeyboard) Shift()   { k.queueModifier("shift") }
 func (k *StickyKeyboard) Command() { k.queueModifier("command") }
 func (k *StickyKeyboard) Control() { k.queueModifier("ctrl") }
 func (k *StickyKeyboard) Alt()     { k.queueModifier("alt") }
-func (k *StickyKeyboard) Option()  { k.queueModifier("option") } // Alias for Alt/Mac specific
+func (k *StickyKeyboard) Option()  { k.queueModifier("option") }
 
 // ----------------------------------------------------------------------------
 // STANDARD KEY METHODS
-// Calling these consumes any pending modifiers.
 // ----------------------------------------------------------------------------
 
 // --- Letters ---
@@ -153,7 +147,7 @@ func (k *StickyKeyboard) X() { k.executeTap("x") }
 func (k *StickyKeyboard) Y() { k.executeTap("y") }
 func (k *StickyKeyboard) Z() { k.executeTap("z") }
 
-// --- Numbers (Single Digits) ---
+// --- Numbers ---
 func (k *StickyKeyboard) Num0() { k.executeTap("0") }
 func (k *StickyKeyboard) Num1() { k.executeTap("1") }
 func (k *StickyKeyboard) Num2() { k.executeTap("2") }
@@ -165,12 +159,8 @@ func (k *StickyKeyboard) Num7() { k.executeTap("7") }
 func (k *StickyKeyboard) Num8() { k.executeTap("8") }
 func (k *StickyKeyboard) Num9() { k.executeTap("9") }
 
-// --- Expanded Number Support ---
+// --- Special Text Helpers ---
 
-// TypeInt types out the string representation of an integer.
-// For example, TypeInt(100) taps '1', then '0', then '0'.
-// Note: Pending modifiers (like Shift) will only apply to the FIRST digit typed
-// because executeTap clears modifiers after the first press.
 func (k *StickyKeyboard) TypeInt(n int) {
 	str := strconv.Itoa(n)
 	for _, char := range str {
@@ -178,35 +168,27 @@ func (k *StickyKeyboard) TypeInt(n int) {
 	}
 }
 
-// TypeStr types out any string character by character.
 func (k *StickyKeyboard) TypeStr(s string) {
 	for _, char := range s {
 		k.executeTap(string(char))
 	}
 }
 
-// --- Casing Methods ---
-
-// CamelCase converts "hello world" to "helloWorld"
 func (k *StickyKeyboard) CamelCase(phrase string) {
 	words := strings.Fields(phrase)
 	for i, w := range words {
-		// Ensure word is lower case first
 		runes := []rune(strings.ToLower(w))
 		if len(runes) == 0 {
 			continue
 		}
-		// If it's not the first word, capitalize the first letter
 		if i > 0 {
 			runes[0] = unicode.ToUpper(runes[0])
 		}
 		words[i] = string(runes)
 	}
-	// Join with empty string
 	k.TypeStr(strings.Join(words, ""))
 }
 
-// PascalCase converts "hello world" to "HelloWorld"
 func (k *StickyKeyboard) PascalCase(phrase string) {
 	words := strings.Fields(phrase)
 	for i, w := range words {
@@ -219,7 +201,6 @@ func (k *StickyKeyboard) PascalCase(phrase string) {
 	k.TypeStr(strings.Join(words, ""))
 }
 
-// SnakeCase converts "Hello World" to "hello_world"
 func (k *StickyKeyboard) SnakeCase(phrase string) {
 	words := strings.Fields(phrase)
 	for i, w := range words {
@@ -228,25 +209,19 @@ func (k *StickyKeyboard) SnakeCase(phrase string) {
 	k.TypeStr(strings.Join(words, "_"))
 }
 
-// Sentence types the words like a standard sentence (e.g., "Hello world")
 func (k *StickyKeyboard) Sentence(phrase string) error {
 	if len(phrase) == 0 {
 		return nil
 	}
-
 	phrase += ". "
-	// Capitalize the very first letter of the sentence
 	runes := []rune(phrase)
 	if len(runes) > 0 {
 		runes[0] = unicode.ToUpper(runes[0])
 	}
-
 	return k.Type(string(runes))
 }
 
-// Type uses robotgo to type the final formatted string string.
 func (k *StickyKeyboard) Type(text string) error {
-	// Robotgo does not return an error, so we wrap it.
 	robotgo.TypeStr(text)
 	return nil
 }
@@ -281,16 +256,43 @@ func (k *StickyKeyboard) End()       { k.executeTap("end") }
 func (k *StickyKeyboard) PageUp()    { k.executeTap("pageup") }
 func (k *StickyKeyboard) PageDown()  { k.executeTap("pagedown") }
 
-// --- Punctuation ---
-func (k *StickyKeyboard) Period()       { k.executeTap(".") }
-func (k *StickyKeyboard) Comma()        { k.executeTap(",") }
-func (k *StickyKeyboard) Slash()        { k.executeTap("/") }
-func (k *StickyKeyboard) Backslash()    { k.executeTap("\\") }
-func (k *StickyKeyboard) Semicolon()    { k.executeTap(";") }
-func (k *StickyKeyboard) Quote()        { k.executeTap("'") }
-func (k *StickyKeyboard) DoubleQuote()  { k.executeTap("\"") }
+// --- Basic Punctuation ---
+func (k *StickyKeyboard) Period()      { k.executeTap(".") }
+func (k *StickyKeyboard) Comma()       { k.executeTap(",") }
+func (k *StickyKeyboard) Slash()       { k.executeTap("/") }
+func (k *StickyKeyboard) Backslash()   { k.executeTap("\\") }
+func (k *StickyKeyboard) Semicolon()   { k.executeTap(";") }
+func (k *StickyKeyboard) Quote()       { k.executeTap("'") }
+func (k *StickyKeyboard) DoubleQuote() { k.executeTap("\"") }
+func (k *StickyKeyboard) Minus()       { k.executeTap("-") }
+func (k *StickyKeyboard) Equal()       { k.executeTap("=") }
+func (k *StickyKeyboard) Backtick()    { k.executeTap("`") }
+
+// --- Shifted Symbols / Programming Characters ---
+// These usually require a Shift modifier, but passing the symbol
+// to RobotGo often handles the mapping automatically.
+
+func (k *StickyKeyboard) Colon()       { k.executeTap(":") }
+func (k *StickyKeyboard) Underscore()  { k.executeTap("_") }
+func (k *StickyKeyboard) Plus()        { k.executeTap("+") }
+func (k *StickyKeyboard) Asterisk()    { k.executeTap("*") }
+func (k *StickyKeyboard) Percent()     { k.executeTap("%") }
+func (k *StickyKeyboard) Exclamation() { k.executeTap("!") }
+func (k *StickyKeyboard) At()          { k.executeTap("@") }
+func (k *StickyKeyboard) Hash()        { k.executeTap("#") }
+func (k *StickyKeyboard) Dollar()      { k.executeTap("$") }
+func (k *StickyKeyboard) Carat()       { k.executeTap("^") }
+func (k *StickyKeyboard) Ampersand()   { k.executeTap("&") }
+func (k *StickyKeyboard) Question()    { k.executeTap("?") }
+func (k *StickyKeyboard) Tilde()       { k.executeTap("~") }
+func (k *StickyKeyboard) Pipe()        { k.executeTap("|") }
+
+// --- Brackets & Grouping ---
+func (k *StickyKeyboard) ParenLeft()    { k.executeTap("(") }
+func (k *StickyKeyboard) ParenRight()   { k.executeTap(")") }
 func (k *StickyKeyboard) BracketLeft()  { k.executeTap("[") }
 func (k *StickyKeyboard) BracketRight() { k.executeTap("]") }
-func (k *StickyKeyboard) Minus()        { k.executeTap("-") }
-func (k *StickyKeyboard) Equal()        { k.executeTap("=") }
-func (k *StickyKeyboard) Backtick()     { k.executeTap("`") }
+func (k *StickyKeyboard) BraceLeft()    { k.executeTap("{") }
+func (k *StickyKeyboard) BraceRight()   { k.executeTap("}") }
+func (k *StickyKeyboard) LessThan()     { k.executeTap("<") }
+func (k *StickyKeyboard) GreaterThan()  { k.executeTap(">") }

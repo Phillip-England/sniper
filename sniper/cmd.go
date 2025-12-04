@@ -253,13 +253,15 @@ func (c PageDown) Action(e *Engine, p string) error {
 }
 
 // ----------------------------------------------------------------------------
-// SYMBOLS (Single word names)
+// SYMBOLS
 // ----------------------------------------------------------------------------
+
+// --- Punctuation & Terminators ---
 
 type Dot struct{} // .
 
-func (Dot) Name() string          { return "dot" }
-func (Dot) CalledBy() []string    { return []string{"dot", "."} }
+func (Dot) Name() string          { return "." }
+func (Dot) CalledBy() []string    { return []string{"dot", "period"} }
 func (Dot) Effects() []EffectFunc { return nil }
 func (c Dot) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -270,7 +272,7 @@ func (c Dot) Action(e *Engine, p string) error {
 
 type Comma struct{} // ,
 
-func (Comma) Name() string          { return "comma" }
+func (Comma) Name() string          { return "," }
 func (Comma) CalledBy() []string    { return []string{"comma"} }
 func (Comma) Effects() []EffectFunc { return nil }
 func (c Comma) Action(e *Engine, p string) error {
@@ -280,10 +282,74 @@ func (c Comma) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
+type Semi struct{} // ;
+
+func (Semi) Name() string          { return ";" }
+func (Semi) CalledBy() []string    { return []string{"semi"} }
+func (Semi) Effects() []EffectFunc { return nil }
+func (c Semi) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Semicolon()
+		return nil
+	}, c.Effects()...)
+}
+
+type Colon struct{} // :
+
+func (Colon) Name() string          { return ":" }
+func (Colon) CalledBy() []string    { return []string{"colon"} }
+func (Colon) Effects() []EffectFunc { return nil }
+func (c Colon) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Colon()
+		return nil
+	}, c.Effects()...)
+}
+
+// --- Quotes ---
+
+type Quote struct{} // '
+
+func (Quote) Name() string          { return "'" }
+func (Quote) CalledBy() []string    { return []string{"single", "quote"} }
+func (Quote) Effects() []EffectFunc { return nil }
+func (c Quote) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Quote()
+		return nil
+	}, c.Effects()...)
+}
+
+type DoubleQuote struct{} // "
+
+func (DoubleQuote) Name() string          { return "\"" }
+func (DoubleQuote) CalledBy() []string    { return []string{"double", "speech"} }
+func (DoubleQuote) Effects() []EffectFunc { return nil }
+func (c DoubleQuote) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.DoubleQuote()
+		return nil
+	}, c.Effects()...)
+}
+
+type Tick struct{} // `
+
+func (Tick) Name() string          { return "`" }
+func (Tick) CalledBy() []string    { return []string{"tick", "backtick"} }
+func (Tick) Effects() []EffectFunc { return nil }
+func (c Tick) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Backtick()
+		return nil
+	}, c.Effects()...)
+}
+
+// --- Slashes & Bars ---
+
 type Slash struct{} // /
 
-func (Slash) Name() string          { return "slash" }
-func (Slash) CalledBy() []string    { return []string{"slash", "/"} }
+func (Slash) Name() string          { return "/" }
+func (Slash) CalledBy() []string    { return []string{"slash"} }
 func (Slash) Effects() []EffectFunc { return nil }
 func (c Slash) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -294,7 +360,7 @@ func (c Slash) Action(e *Engine, p string) error {
 
 type Backslash struct{} // \
 
-func (Backslash) Name() string          { return "backslash" }
+func (Backslash) Name() string          { return "\\" }
 func (Backslash) CalledBy() []string    { return []string{"backslash"} }
 func (Backslash) Effects() []EffectFunc { return nil }
 func (c Backslash) Action(e *Engine, p string) error {
@@ -304,46 +370,48 @@ func (c Backslash) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
-type Semi struct{} // ;
+type Pipe struct{} // |
 
-func (Semi) Name() string          { return "semi" }
-func (Semi) CalledBy() []string    { return []string{"semi"} }
-func (Semi) Effects() []EffectFunc { return nil }
-func (c Semi) Action(e *Engine, p string) error {
+func (Pipe) Name() string          { return "|" }
+func (Pipe) CalledBy() []string    { return []string{"pipe"} }
+func (Pipe) Effects() []EffectFunc { return nil }
+func (c Pipe) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
-		e.StickyKeyboard.Semicolon()
+		e.StickyKeyboard.Pipe()
 		return nil
 	}, c.Effects()...)
 }
 
-type Quote struct{} // '
+// --- Grouping Symbols (Parens, Brackets, Braces) ---
 
-func (Quote) Name() string          { return "quote" }
-func (Quote) CalledBy() []string    { return []string{"single"} }
-func (Quote) Effects() []EffectFunc { return nil }
-func (c Quote) Action(e *Engine, p string) error {
+type Paren struct{} // (
+
+func (Paren) Name() string          { return "(" }
+func (Paren) CalledBy() []string    { return []string{"paren", "open paren"} }
+func (Paren) Effects() []EffectFunc { return nil }
+func (c Paren) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
-		e.StickyKeyboard.Quote()
+		e.StickyKeyboard.ParenLeft()
 		return nil
 	}, c.Effects()...)
 }
 
-type DoubleQuote struct{} // '
+type CloseParen struct{} // )
 
-func (DoubleQuote) Name() string          { return "double_quote" }
-func (DoubleQuote) CalledBy() []string    { return []string{"double"} }
-func (DoubleQuote) Effects() []EffectFunc { return nil }
-func (c DoubleQuote) Action(e *Engine, p string) error {
+func (CloseParen) Name() string          { return ")" }
+func (CloseParen) CalledBy() []string    { return []string{"close paren", "end paren"} }
+func (CloseParen) Effects() []EffectFunc { return nil }
+func (c CloseParen) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
-		e.StickyKeyboard.DoubleQuote()
+		e.StickyKeyboard.ParenRight()
 		return nil
 	}, c.Effects()...)
 }
 
 type Bracket struct{} // [
 
-func (Bracket) Name() string          { return "bracket" }
-func (Bracket) CalledBy() []string    { return []string{"bracket"} }
+func (Bracket) Name() string          { return "[" }
+func (Bracket) CalledBy() []string    { return []string{"bracket", "square"} }
 func (Bracket) Effects() []EffectFunc { return nil }
 func (c Bracket) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -354,8 +422,8 @@ func (c Bracket) Action(e *Engine, p string) error {
 
 type Closing struct{} // ]
 
-func (Closing) Name() string          { return "closing" }
-func (Closing) CalledBy() []string    { return []string{"closing"} }
+func (Closing) Name() string          { return "]" }
+func (Closing) CalledBy() []string    { return []string{"closing", "close bracket"} }
 func (Closing) Effects() []EffectFunc { return nil }
 func (c Closing) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -364,10 +432,60 @@ func (c Closing) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
+type Brace struct{} // {
+
+func (Brace) Name() string          { return "{" }
+func (Brace) CalledBy() []string    { return []string{"curly", "brace"} }
+func (Brace) Effects() []EffectFunc { return nil }
+func (c Brace) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.BraceLeft()
+		return nil
+	}, c.Effects()...)
+}
+
+type CloseBrace struct{} // }
+
+func (CloseBrace) Name() string          { return "}" }
+func (CloseBrace) CalledBy() []string    { return []string{"close curly", "end brace"} }
+func (CloseBrace) Effects() []EffectFunc { return nil }
+func (c CloseBrace) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.BraceRight()
+		return nil
+	}, c.Effects()...)
+}
+
+type Angle struct{} // <
+
+func (Angle) Name() string          { return "<" }
+func (Angle) CalledBy() []string    { return []string{"less", "angle"} }
+func (Angle) Effects() []EffectFunc { return nil }
+func (c Angle) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.LessThan()
+		return nil
+	}, c.Effects()...)
+}
+
+type CloseAngle struct{} // >
+
+func (CloseAngle) Name() string          { return ">" }
+func (CloseAngle) CalledBy() []string    { return []string{"greater", "close angle"} }
+func (CloseAngle) Effects() []EffectFunc { return nil }
+func (c CloseAngle) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.GreaterThan()
+		return nil
+	}, c.Effects()...)
+}
+
+// --- Math & Logic ---
+
 type Dash struct{} // -
 
-func (Dash) Name() string          { return "dash" }
-func (Dash) CalledBy() []string    { return []string{"dash", "-"} }
+func (Dash) Name() string          { return "-" }
+func (Dash) CalledBy() []string    { return []string{"dash", "minus"} }
 func (Dash) Effects() []EffectFunc { return nil }
 func (c Dash) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -376,10 +494,22 @@ func (c Dash) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
+type Underscore struct{} // _
+
+func (Underscore) Name() string          { return "_" }
+func (Underscore) CalledBy() []string    { return []string{"under", "underscore"} }
+func (Underscore) Effects() []EffectFunc { return nil }
+func (c Underscore) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Underscore()
+		return nil
+	}, c.Effects()...)
+}
+
 type Equals struct{} // =
 
-func (Equals) Name() string          { return "equals" }
-func (Equals) CalledBy() []string    { return []string{"equals", "="} }
+func (Equals) Name() string          { return "=" }
+func (Equals) CalledBy() []string    { return []string{"equals", "assign"} }
 func (Equals) Effects() []EffectFunc { return nil }
 func (c Equals) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -388,14 +518,136 @@ func (c Equals) Action(e *Engine, p string) error {
 	}, c.Effects()...)
 }
 
-type Tick struct{} // `
+type Plus struct{} // +
 
-func (Tick) Name() string          { return "tick" }
-func (Tick) CalledBy() []string    { return []string{"tick"} }
-func (Tick) Effects() []EffectFunc { return nil }
-func (c Tick) Action(e *Engine, p string) error {
+func (Plus) Name() string          { return "+" }
+func (Plus) CalledBy() []string    { return []string{"plus", "add"} }
+func (Plus) Effects() []EffectFunc { return nil }
+func (c Plus) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
-		e.StickyKeyboard.Backtick()
+		e.StickyKeyboard.Plus()
+		return nil
+	}, c.Effects()...)
+}
+
+type Star struct{} // *
+
+func (Star) Name() string          { return "*" }
+func (Star) CalledBy() []string    { return []string{"star", "times"} }
+func (Star) Effects() []EffectFunc { return nil }
+func (c Star) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Asterisk()
+		return nil
+	}, c.Effects()...)
+}
+
+type Percent struct{} // %
+
+func (Percent) Name() string          { return "%" }
+func (Percent) CalledBy() []string    { return []string{"percent", "mod"} }
+func (Percent) Effects() []EffectFunc { return nil }
+func (c Percent) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Percent()
+		return nil
+	}, c.Effects()...)
+}
+
+// --- Special Characters ---
+
+type Bang struct{} // !
+
+func (Bang) Name() string          { return "!" }
+func (Bang) CalledBy() []string    { return []string{"bang", "not"} }
+func (Bang) Effects() []EffectFunc { return nil }
+func (c Bang) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Exclamation()
+		return nil
+	}, c.Effects()...)
+}
+
+type At struct{} // @
+
+func (At) Name() string          { return "@" }
+func (At) CalledBy() []string    { return []string{"at", "email"} }
+func (At) Effects() []EffectFunc { return nil }
+func (c At) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.At()
+		return nil
+	}, c.Effects()...)
+}
+
+type Hash struct{} // #
+
+func (Hash) Name() string          { return "#" }
+func (Hash) CalledBy() []string    { return []string{"hash", "pound"} }
+func (Hash) Effects() []EffectFunc { return nil }
+func (c Hash) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Hash()
+		return nil
+	}, c.Effects()...)
+}
+
+type Dollar struct{} // $
+
+func (Dollar) Name() string          { return "$" }
+func (Dollar) CalledBy() []string    { return []string{"dollar", "cash"} }
+func (Dollar) Effects() []EffectFunc { return nil }
+func (c Dollar) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Dollar()
+		return nil
+	}, c.Effects()...)
+}
+
+type Hat struct{} // ^
+
+func (Hat) Name() string          { return "^" }
+func (Hat) CalledBy() []string    { return []string{"hat", "carat"} }
+func (Hat) Effects() []EffectFunc { return nil }
+func (c Hat) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Carat()
+		return nil
+	}, c.Effects()...)
+}
+
+type Ampersand struct{} // &
+
+func (Ampersand) Name() string          { return "&" }
+func (Ampersand) CalledBy() []string    { return []string{"amp", "and"} }
+func (Ampersand) Effects() []EffectFunc { return nil }
+func (c Ampersand) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Ampersand()
+		return nil
+	}, c.Effects()...)
+}
+
+type Question struct{} // ?
+
+func (Question) Name() string          { return "?" }
+func (Question) CalledBy() []string    { return []string{"question"} }
+func (Question) Effects() []EffectFunc { return nil }
+func (c Question) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Question()
+		return nil
+	}, c.Effects()...)
+}
+
+type Tilde struct{} // ~
+
+func (Tilde) Name() string          { return "~" }
+func (Tilde) CalledBy() []string    { return []string{"tilde", "wave"} }
+func (Tilde) Effects() []EffectFunc { return nil }
+func (c Tilde) Action(e *Engine, p string) error {
+	return EffectChain(e, func() error {
+		e.StickyKeyboard.Tilde()
 		return nil
 	}, c.Effects()...)
 }
@@ -1151,7 +1403,7 @@ func (c DeleteWord) Action(e *Engine, p string) error {
 // Grab clicks the mouse (to focus), Selects All, and then Copies.
 type Save struct{}
 
-func (Save) Name() string       { return "yank" }
+func (Save) Name() string       { return "save" }
 func (Save) CalledBy() []string { return []string{"save", "safe"} }
 
 // Uses the new ClickBefore effect
@@ -1256,6 +1508,9 @@ func (c Replace) Action(e *Engine, p string) error {
 		time.Sleep(time.Millisecond * 2)
 		e.StickyKeyboard.Control()
 		e.StickyKeyboard.V()
+		time.Sleep(time.Millisecond * 2)
+		e.StickyKeyboard.Control()
+		e.StickyKeyboard.S()
 		return nil
 	}, c.Effects()...)
 }
@@ -1502,9 +1757,26 @@ var Registry = []Cmd{
 	Enter{}, Tab{}, Space{}, Back{}, Delete{}, Escape{},
 	Home{}, End{}, PageUp{}, PageDown{},
 
-	// Symbols
-	Dot{}, Comma{}, Slash{}, Backslash{}, Semi{}, Quote{},
-	Bracket{}, Closing{}, Dash{}, Equals{}, Tick{}, DoubleQuote{},
+	// Symbols (Basic Punctuation)
+	Dot{}, Comma{}, Semi{}, Colon{},
+	Quote{}, DoubleQuote{}, Tick{},
+
+	// Symbols (Slashes & Bars)
+	Slash{}, Backslash{}, Pipe{},
+
+	// Symbols (Grouping)
+	Paren{}, CloseParen{},
+	Bracket{}, Closing{},
+	Brace{}, CloseBrace{},
+	Angle{}, CloseAngle{},
+
+	// Symbols (Math & Logic)
+	Dash{}, Underscore{}, Equals{}, Plus{},
+	Star{}, Percent{},
+
+	// Symbols (Special Characters)
+	Bang{}, At{}, Hash{}, Dollar{},
+	Hat{}, Ampersand{}, Question{}, Tilde{},
 
 	// Alphabet
 	A{}, B{}, C{}, D{}, E{}, F{},
@@ -1526,10 +1798,10 @@ var Registry = []Cmd{
 	// Formatting
 	CamelCase{}, PascalCase{}, SnakeCase{}, Say{}, RawType{}, Word{},
 
-	// SHORTCUTS (New Combos)
+	// SHORTCUTS (Combos)
 	Copy{}, Select{}, Paste{}, Telescope{}, Undo{}, Save{},
 
-	// ADVANCED ACTIONS (New Click+Combo)
+	// ADVANCED ACTIONS (Click+Combo)
 	Grab{}, Shove{}, Find{}, DeleteWord{}, Yank{}, Bottom{}, Top{}, Replace{},
 
 	// HISTORY
