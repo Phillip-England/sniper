@@ -335,7 +335,7 @@ func (DoubleQuote) CalledBy() []string    { return []string{"double"} }
 func (DoubleQuote) Effects() []EffectFunc { return nil }
 func (c DoubleQuote) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
-		e.StickyKeyboard.Quote()
+		e.StickyKeyboard.DoubleQuote()
 		return nil
 	}, c.Effects()...)
 }
