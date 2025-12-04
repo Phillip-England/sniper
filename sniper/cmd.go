@@ -1504,7 +1504,7 @@ var Registry = []Cmd{
 
 	// Symbols
 	Dot{}, Comma{}, Slash{}, Backslash{}, Semi{}, Quote{},
-	Bracket{}, Closing{}, Dash{}, Equals{}, Tick{},
+	Bracket{}, Closing{}, Dash{}, Equals{}, Tick{}, DoubleQuote{},
 
 	// Alphabet
 	A{}, B{}, C{}, D{}, E{}, F{},
