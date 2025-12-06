@@ -11,7 +11,7 @@ export class RapidMode implements IRecognitionMode {
     this.sysCmd = new StaticCommandHandler(core);
   }
 
-  handleResult(event: SpeechRecognitionEvent): void {
+  async handleResult(event: SpeechRecognitionEvent): Promise<void> {
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       const result = event.results[i];
       if (!result || !result.length) continue;
@@ -27,7 +27,11 @@ export class RapidMode implements IRecognitionMode {
       }
 
       this.core.commandCenter.consume(transcript);
-      this.core.api.sendCommand(transcript.trim());
+      let status = await this.core.api.sendCommand(transcript.trim());
+      if (status != 200) {
+        this.core.ui.updateText("", "", this.core.state.isLogging);
+        return
+      }
       this.core.audio.play("click");
       // 2. UI Updates
       if (result.isFinal) {

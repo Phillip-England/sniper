@@ -14,7 +14,7 @@ import { RapidMode } from "./RapidMode";
 
 // The Interface for any future mode (Rapid, Phrase, etc.)
 export interface IRecognitionMode {
-  handleResult(event: SpeechRecognitionEvent): void;
+  handleResult(event: SpeechRecognitionEvent): Promise<void>;
 }
 
 /**
@@ -115,8 +115,8 @@ export class SniperCore {
     };
 
     // DELEGATION HAPPENS HERE
-    this.recognition.onresult = (event: SpeechRecognitionEvent) => {
-      this.mode.handleResult(event);
+    this.recognition.onresult = async (event: SpeechRecognitionEvent) => {
+      await this.mode.handleResult(event);
     };
 
     this.recognition.onerror = (event: SpeechRecognitionErrorEvent) => {

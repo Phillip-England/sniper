@@ -13,7 +13,7 @@ export class PhraseMode implements IRecognitionMode {
     this.sysCmd = new StaticCommandHandler(core);
   }
 
-  public handleResult(event: SpeechRecognitionEvent): void {
+  public async handleResult(event: SpeechRecognitionEvent): Promise<void> {
     // 1. Clear existing silence timer
     if (this.silenceTimer) {
       clearTimeout(this.silenceTimer);
