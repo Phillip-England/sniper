@@ -6,7 +6,7 @@ export class PhraseMode implements IRecognitionMode {
   private core: SniperCore;
   private sysCmd: StaticCommandHandler;
   private silenceTimer: any = null;
-  private currentInterim: string = '';
+  private currentInterim: string = "";
 
   constructor(core: SniperCore) {
     this.core = core;
@@ -20,8 +20,8 @@ export class PhraseMode implements IRecognitionMode {
       this.silenceTimer = null;
     }
 
-    let finalChunk = '';
-    let interimChunk = '';
+    let finalChunk = "";
+    let interimChunk = "";
 
     // 2. Accumulate Results
     for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -43,14 +43,14 @@ export class PhraseMode implements IRecognitionMode {
     if (finalChunk) {
       this.executeFinalSequence(finalChunk, interimChunk);
     } else {
-      this.core.ui.updateText('', interimChunk, this.core.state.isLogging);
+      this.core.ui.updateText("", interimChunk, this.core.state.isLogging);
 
       // Force finalize if stuck in interim state for too long
       if (interimChunk.trim().length > 0) {
         this.silenceTimer = setTimeout(() => {
           console.log("[Sniper] Force finalizing stuck interim result...");
-          this.executeFinalSequence(this.currentInterim, '');
-          this.currentInterim = '';
+          this.executeFinalSequence(this.currentInterim, "");
+          this.currentInterim = "";
         }, 1000);
       }
     }
@@ -58,7 +58,7 @@ export class PhraseMode implements IRecognitionMode {
 
   private executeFinalSequence(finalText: string, interimText: string) {
     this.core.ui.updateText(finalText, interimText, this.core.state.isLogging);
-    
+
     // 1. Delegate to Shared System Handler
     const wasSystemCommand = this.sysCmd.process(finalText);
 
@@ -66,7 +66,7 @@ export class PhraseMode implements IRecognitionMode {
     if (!wasSystemCommand) {
       if (this.core.state.isLogging) {
         this.core.api.sendCommand(finalText.trim());
-        this.core.audio.play('click');
+        this.core.audio.play("click");
       }
     }
   }
