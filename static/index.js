@@ -119,40 +119,221 @@ class AudioManager {
   }
 }
 
-// client/SniperCore.ts
-class SniperCore {
-  audio;
-  ui;
-  recognition = null;
-  lastCommand = "";
-  commandTriggers = [];
-  silenceTimer = null;
-  currentInterim = "";
-  state = {
-    isRecording: false,
-    isLogging: true,
-    shouldContinue: false
-  };
-  constructor(audio, ui) {
-    this.audio = audio;
-    this.ui = ui;
-    this.initializeSpeechEngine();
-    this.bindEvents();
-    this.loadCommandTriggers();
+// client/CommandCenter.ts
+class CommandCenter {
+  triggers = [];
+  lastConsumed = "";
+  strategy;
+  constructor() {
+    this.load();
+    this.strategy = 1 /* Phrase */;
   }
-  async loadCommandTriggers() {
+  async load() {
     try {
       const response = await fetch("/api/commands/min");
       if (!response.ok) {
         throw new Error(`Failed to fetch commands: ${response.statusText}`);
       }
       const commands = await response.json();
-      this.commandTriggers = commands.reduce((acc, cmd) => {
+      this.triggers = commands.reduce((acc, cmd) => {
         return acc.concat(cmd.called_by);
       }, []);
-      console.log(`[Sniper] Loaded ${this.commandTriggers.length} command triggers.`);
+      console.log(`[CommandCenter] Loaded ${this.triggers.length} command triggers.`);
     } catch (err) {
-      console.warn("[Sniper] Could not load command registry. Command validation may be limited.", err);
+      console.warn("[CommandCenter] Could not load command registry.", err);
+    }
+  }
+  getTriggers() {
+    return this.triggers;
+  }
+  isValidTrigger(phrase) {
+    return this.triggers.includes(phrase.toLowerCase());
+  }
+  consume(input) {
+    const cleanInput = input.trim();
+    if (this.isValidTrigger(cleanInput)) {
+      this.lastConsumed = cleanInput;
+      console.log(`[CommandCenter] consumed: "${this.lastConsumed}"`);
+      return true;
+    }
+    return false;
+  }
+  getLastConsumed() {
+    return this.lastConsumed;
+  }
+}
+
+// client/SniperService.ts
+class SniperService {
+  baseUrl = "http://localhost:9090";
+  async sendCommand(command) {
+    try {
+      console.log(`[SniperService] Sending: ${command}`);
+      await fetch(`${this.baseUrl}/api/data`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ command })
+      });
+    } catch (err) {
+      console.warn("[SniperService] Connection failed. Is the backend running?", err);
+    }
+  }
+}
+
+// client/StaticCommandHandler.ts
+class StaticCommandHandler {
+  core;
+  constructor(core) {
+    this.core = core;
+  }
+  process(text) {
+    const command = text.toLowerCase().trim().replace(/[?!.,]/g, "");
+    switch (command) {
+      case "exit":
+        this.core.audio.play("sniper-exit");
+        this.core.ui.clearText();
+        this.core.state.shouldContinue = false;
+        this.core.stop();
+        return true;
+      case "off":
+        this.core.audio.play("sniper-off");
+        this.core.ui.clearText();
+        this.core.state.isLogging = false;
+        this.core.ui.updateGreenDot(this.core.state.isRecording, this.core.state.isLogging);
+        return true;
+      case "on":
+        this.core.audio.play("sniper-on");
+        this.core.state.isLogging = true;
+        this.core.ui.updateGreenDot(this.core.state.isRecording, this.core.state.isLogging);
+        return true;
+    }
+    return false;
+  }
+}
+
+// client/PhraseMode.ts
+class PhraseMode {
+  core;
+  sysCmd;
+  silenceTimer = null;
+  currentInterim = "";
+  constructor(core) {
+    this.core = core;
+    this.sysCmd = new StaticCommandHandler(core);
+  }
+  handleResult(event) {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+    let finalChunk = "";
+    let interimChunk = "";
+    for (let i = event.resultIndex;i < event.results.length; ++i) {
+      const result = event.results[i];
+      if (!result || !result.length)
+        continue;
+      const alternative = result[0];
+      if (!alternative)
+        continue;
+      if (result.isFinal) {
+        finalChunk += alternative.transcript;
+      } else {
+        interimChunk += alternative.transcript;
+      }
+    }
+    this.currentInterim = interimChunk;
+    if (finalChunk) {
+      this.executeFinalSequence(finalChunk, interimChunk);
+    } else {
+      this.core.ui.updateText("", interimChunk, this.core.state.isLogging);
+      if (interimChunk.trim().length > 0) {
+        this.silenceTimer = setTimeout(() => {
+          console.log("[Sniper] Force finalizing stuck interim result...");
+          this.executeFinalSequence(this.currentInterim, "");
+          this.currentInterim = "";
+        }, 1000);
+      }
+    }
+  }
+  executeFinalSequence(finalText, interimText) {
+    this.core.ui.updateText(finalText, interimText, this.core.state.isLogging);
+    const wasSystemCommand = this.sysCmd.process(finalText);
+    if (!wasSystemCommand) {
+      if (this.core.state.isLogging) {
+        this.core.api.sendCommand(finalText.trim());
+        this.core.audio.play("click");
+      }
+    }
+  }
+}
+
+// client/RapidMode.ts
+class RapidMode {
+  core;
+  sysCmd;
+  constructor(core) {
+    this.core = core;
+    this.sysCmd = new StaticCommandHandler(core);
+  }
+  handleResult(event) {
+    for (let i = event.resultIndex;i < event.results.length; ++i) {
+      const result = event.results[i];
+      if (!result || !result.length)
+        continue;
+      const alternative = result[0];
+      if (!alternative)
+        continue;
+      const transcript = alternative.transcript;
+      if (this.sysCmd.process(transcript)) {
+        return;
+      }
+      if (result.isFinal) {
+        this.core.ui.updateText(transcript, "", this.core.state.isLogging);
+      } else {
+        this.core.ui.updateText("", transcript, this.core.state.isLogging);
+      }
+      if (result.isFinal && this.core.state.isLogging) {
+        this.core.commandCenter.consume(transcript);
+        this.core.api.sendCommand(transcript.trim());
+        this.core.audio.play("click");
+      }
+    }
+  }
+}
+
+// client/SniperCore.ts
+class SniperCore {
+  audio;
+  ui;
+  api;
+  commandCenter;
+  state = {
+    isRecording: false,
+    isLogging: true,
+    shouldContinue: false
+  };
+  recognition = null;
+  mode;
+  constructor(audio, ui) {
+    this.audio = audio;
+    this.ui = ui;
+    this.commandCenter = new CommandCenter;
+    this.api = new SniperService;
+    this.mode = new RapidMode(this);
+    this.initializeSpeechEngine();
+    this.bindEvents();
+  }
+  setMode(modeType) {
+    if (modeType === "rapid") {
+      console.log("[Sniper] Switching to Rapid Mode");
+      this.mode = new RapidMode(this);
+      this.audio.play("sniper-on");
+    } else {
+      console.log("[Sniper] Switching to Phrase Mode");
+      this.mode = new PhraseMode(this);
+      this.audio.play("click");
     }
   }
   initializeSpeechEngine() {
@@ -188,38 +369,7 @@ class SniperCore {
       this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
     };
     this.recognition.onresult = (event) => {
-      if (this.silenceTimer) {
-        clearTimeout(this.silenceTimer);
-        this.silenceTimer = null;
-      }
-      let finalChunk = "";
-      let interimChunk = "";
-      for (let i = event.resultIndex;i < event.results.length; ++i) {
-        const result = event.results[i];
-        if (!result || !result.length)
-          continue;
-        const alternative = result[0];
-        if (!alternative)
-          continue;
-        if (result.isFinal) {
-          finalChunk += alternative.transcript;
-        } else {
-          interimChunk += alternative.transcript;
-        }
-      }
-      this.currentInterim = interimChunk;
-      if (finalChunk) {
-        this.executeFinalSequence(finalChunk, interimChunk);
-      } else {
-        this.ui.updateText("", interimChunk, this.state.isLogging);
-        if (interimChunk.trim().length > 0) {
-          this.silenceTimer = setTimeout(() => {
-            console.log("[Sniper] Force finalizing stuck interim result...");
-            this.executeFinalSequence(this.currentInterim, "");
-            this.currentInterim = "";
-          }, 1000);
-        }
-      }
+      this.mode.handleResult(event);
     };
     this.recognition.onerror = (event) => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
@@ -227,57 +377,6 @@ class SniperCore {
         this.stop();
       }
     };
-  }
-  executeFinalSequence(finalText, interimText) {
-    this.ui.updateText(finalText, interimText, this.state.isLogging);
-    const processed = this.handleCommands(finalText);
-    if (!processed.capturedByCommand && this.state.isLogging) {
-      this.audio.play("click");
-    }
-  }
-  async sendToBackend(command) {
-    try {
-      console.log(`[Sniper] Sending to backend: ${command}`);
-      await fetch("http://localhost:9090/api/data", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ command })
-      });
-    } catch (err) {
-      console.warn("[Sniper] Backend connection failed. Is localhost:9090 running?");
-    }
-  }
-  handleCommands(text) {
-    const command = text.toLowerCase().trim().replace(/[?!]/g, "");
-    if (command) {
-      this.lastCommand = command;
-    }
-    switch (command.replace(/[.,]/g, "")) {
-      case "exit":
-        this.audio.play("sniper-exit");
-        this.ui.clearText();
-        this.state.shouldContinue = false;
-        this.stop();
-        return { capturedByCommand: true };
-      case "off":
-        this.audio.play("sniper-off");
-        this.ui.clearText();
-        this.state.isLogging = false;
-        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-        return { capturedByCommand: true };
-      case "on":
-        this.audio.play("sniper-on");
-        this.state.isLogging = true;
-        this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
-        return { capturedByCommand: true };
-      default:
-        if (this.state.isLogging) {
-          this.sendToBackend(command);
-        }
-        return { capturedByCommand: false };
-    }
   }
   bindEvents() {
     const btn = this.ui.getRecordButton();

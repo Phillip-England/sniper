@@ -387,7 +387,7 @@ func (c Pipe) Action(e *Engine, p string) error {
 type Paren struct{} // (
 
 func (Paren) Name() string          { return "(" }
-func (Paren) CalledBy() []string    { return []string{"paren", "open paren"} }
+func (Paren) CalledBy() []string    { return []string{"open"} }
 func (Paren) Effects() []EffectFunc { return nil }
 func (c Paren) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
@@ -399,7 +399,7 @@ func (c Paren) Action(e *Engine, p string) error {
 type CloseParen struct{} // )
 
 func (CloseParen) Name() string          { return ")" }
-func (CloseParen) CalledBy() []string    { return []string{"close paren", "end paren"} }
+func (CloseParen) CalledBy() []string    { return []string{"close"} }
 func (CloseParen) Effects() []EffectFunc { return nil }
 func (c CloseParen) Action(e *Engine, p string) error {
 	return EffectChain(e, func() error {
