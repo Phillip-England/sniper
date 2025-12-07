@@ -18,6 +18,10 @@ export class RapidMode implements IRecognitionMode {
     this.prevWord = ''
   }
 
+  name() {
+    return "rapid"
+  }
+
   async handleResult(event: SpeechRecognitionEvent): Promise<void> {
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       const result = event.results[i];
@@ -52,7 +56,7 @@ export class RapidMode implements IRecognitionMode {
         continue
       }
 
-      let status = await this.core.api.sendCommand(lastWord);
+      let status = await this.core.api.sendCommand(lastWord, this.core.mode);
       if (status != 200) {
         this.core.ui.updateText("", "", this.core.state.isLogging);
         return

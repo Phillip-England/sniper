@@ -175,7 +175,7 @@ class UIManager {
 // client/SniperService.ts
 class SniperService {
   baseUrl = "http://localhost:9090";
-  async sendCommand(command) {
+  async sendCommand(command, mode) {
     try {
       console.log(`[SniperService] Sending: ${command}`);
       const response = await fetch(`${this.baseUrl}/api/data`, {
@@ -183,7 +183,10 @@ class SniperService {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ command })
+        body: JSON.stringify({
+          command,
+          mode: mode.name()
+        })
       });
       if (!response.ok) {
         console.warn(`[SniperService] Request failed with status: ${response.status} ${response.statusText}`);
@@ -246,6 +249,9 @@ class PhraseMode {
     this.core = core;
     this.sysCmd = new StaticCommandHandler(core);
   }
+  name() {
+    return "phrase";
+  }
   async handleResult(event) {
     if (this.silenceTimer) {
       clearTimeout(this.silenceTimer);
@@ -285,7 +291,7 @@ class PhraseMode {
     const wasSystemCommand = this.sysCmd.process(finalText);
     if (!wasSystemCommand) {
       if (this.core.state.isLogging) {
-        this.core.api.sendCommand(finalText.trim());
+        this.core.api.sendCommand(finalText.trim(), this.core.mode);
         this.core.audio.play("click");
       }
     }
@@ -336,6 +342,9 @@ class RapidMode {
     this.sameWordThrottler = new Throttler(1100);
     this.prevWord = "";
   }
+  name() {
+    return "rapid";
+  }
   async handleResult(event) {
     for (let i = event.resultIndex;i < event.results.length; ++i) {
       const result = event.results[i];
@@ -361,7 +370,7 @@ class RapidMode {
       if (this.prevWord == lastWord && this.sameWordThrottler.isWaiting()) {
         continue;
       }
-      let status = await this.core.api.sendCommand(lastWord);
+      let status = await this.core.api.sendCommand(lastWord, this.core.mode);
       if (status != 200) {
         this.core.ui.updateText("", "", this.core.state.isLogging);
         return;

@@ -104,7 +104,10 @@ func runServer(engine *sniper.Engine) error {
 	app.At("POST /api/data", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Command string `json:"command"`
+			Mode    string `json:"mode"`
 		}
+
+		fmt.Println(req.Mode)
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)

@@ -15,6 +15,7 @@ import { RapidMode } from "./RapidMode";
 // The Interface for any future mode (Rapid, Phrase, etc.)
 export interface IRecognitionMode {
   handleResult(event: SpeechRecognitionEvent): Promise<void>;
+  name(): string,
 }
 
 /**

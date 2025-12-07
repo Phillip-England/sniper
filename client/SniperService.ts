@@ -1,3 +1,5 @@
+import type { IRecognitionMode } from "./SniperCore";
+
 export class SniperService {
   private readonly baseUrl = "http://localhost:9090";
 
@@ -5,7 +7,7 @@ export class SniperService {
    * Sends the processed command string to the backend API.
    * @returns A promise that resolves to the HTTP status code of the response.
    */
-  public async sendCommand(command: string): Promise<number> {
+  public async sendCommand(command: string, mode: IRecognitionMode): Promise<number> {
     try {
       console.log(`[SniperService] Sending: ${command}`);
       const response = await fetch(`${this.baseUrl}/api/data`, {
@@ -13,7 +15,10 @@ export class SniperService {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ command: command }),
+        body: JSON.stringify({ 
+          command: command,
+          mode: mode.name(),
+        }),
       });
 
       // Check if the request was successful

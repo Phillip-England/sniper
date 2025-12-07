@@ -13,6 +13,10 @@ export class PhraseMode implements IRecognitionMode {
     this.sysCmd = new StaticCommandHandler(core);
   }
 
+  name() {
+    return "phrase"
+  }
+
   public async handleResult(event: SpeechRecognitionEvent): Promise<void> {
     // 1. Clear existing silence timer
     if (this.silenceTimer) {
@@ -65,7 +69,7 @@ export class PhraseMode implements IRecognitionMode {
     // 2. If not a system command, treat as a Phrase
     if (!wasSystemCommand) {
       if (this.core.state.isLogging) {
-        this.core.api.sendCommand(finalText.trim());
+        this.core.api.sendCommand(finalText.trim(), this.core.mode);
         this.core.audio.play("click");
       }
     }
