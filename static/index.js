@@ -1,3 +1,78 @@
+// client/AudioManager.ts
+class AudioManager {
+  sounds;
+  constructor() {
+    this.sounds = {
+      "sniper-on": new Audio("/static/on.wav"),
+      "sniper-off": new Audio("/static/off.wav"),
+      "sniper-exit": new Audio("/static/exit.wav"),
+      "sniper-clear": new Audio("/static/clear.wav"),
+      "sniper-copy": new Audio("/static/copy.wav"),
+      "sniper-search": new Audio("/static/search.wav"),
+      "sniper-visit": new Audio("/static/visit.wav"),
+      click: new Audio("/static/click.wav")
+    };
+    this.preloadSounds();
+  }
+  preloadSounds() {
+    Object.values(this.sounds).forEach((sound) => {
+      sound.preload = "auto";
+      sound.load();
+    });
+  }
+  play(type) {
+    const audio = this.sounds[type];
+    audio.currentTime = 0;
+    audio.play().catch((e) => {
+      console.warn(`Audio playback failed for ${type}`, e);
+    });
+  }
+}
+
+// client/CommandCenter.ts
+class CommandCenter {
+  triggers = [];
+  lastConsumed = "";
+  strategy;
+  constructor() {
+    this.load();
+    this.strategy = 1 /* Phrase */;
+  }
+  async load() {
+    try {
+      const response = await fetch("/api/commands/min");
+      if (!response.ok) {
+        throw new Error(`Failed to fetch commands: ${response.statusText}`);
+      }
+      const commands = await response.json();
+      this.triggers = commands.reduce((acc, cmd) => {
+        return acc.concat(cmd.called_by);
+      }, []);
+      console.log(`[CommandCenter] Loaded ${this.triggers.length} command triggers.`);
+    } catch (err) {
+      console.warn("[CommandCenter] Could not load command registry.", err);
+    }
+  }
+  getTriggers() {
+    return this.triggers;
+  }
+  isValidTrigger(phrase) {
+    return this.triggers.includes(phrase.toLowerCase());
+  }
+  consume(input) {
+    const cleanInput = input.trim();
+    if (this.isValidTrigger(cleanInput)) {
+      this.lastConsumed = cleanInput;
+      console.log(`[CommandCenter] consumed: "${this.lastConsumed}"`);
+      return true;
+    }
+    return false;
+  }
+  getLastConsumed() {
+    return this.lastConsumed;
+  }
+}
+
 // client/UIManager.ts
 class UIManager {
   btn;
@@ -8,8 +83,17 @@ class UIManager {
   statusText;
   copyBtn;
   greenDot;
-  defaultClasses = ["bg-red-600", "hover:scale-105", "hover:bg-red-500"];
-  recordingClasses = ["bg-red-700", "animate-pulse", "ring-4", "ring-red-900"];
+  defaultClasses = [
+    "bg-red-600",
+    "hover:scale-105",
+    "hover:bg-red-500"
+  ];
+  recordingClasses = [
+    "bg-red-700",
+    "animate-pulse",
+    "ring-4",
+    "ring-red-900"
+  ];
   constructor() {
     this.btn = document.getElementById("record-button");
     this.transcriptEl = document.getElementById("transcript");
@@ -88,96 +172,26 @@ class UIManager {
   }
 }
 
-// client/AudioManager.ts
-class AudioManager {
-  sounds;
-  constructor() {
-    this.sounds = {
-      "sniper-on": new Audio("/static/on.wav"),
-      "sniper-off": new Audio("/static/off.wav"),
-      "sniper-exit": new Audio("/static/exit.wav"),
-      "sniper-clear": new Audio("/static/clear.wav"),
-      "sniper-copy": new Audio("/static/copy.wav"),
-      "sniper-search": new Audio("/static/search.wav"),
-      "sniper-visit": new Audio("/static/visit.wav"),
-      click: new Audio("/static/click.wav")
-    };
-    this.preloadSounds();
-  }
-  preloadSounds() {
-    Object.values(this.sounds).forEach((sound) => {
-      sound.preload = "auto";
-      sound.load();
-    });
-  }
-  play(type) {
-    const audio = this.sounds[type];
-    audio.currentTime = 0;
-    audio.play().catch((e) => {
-      console.warn(`Audio playback failed for ${type}`, e);
-    });
-  }
-}
-
-// client/CommandCenter.ts
-class CommandCenter {
-  triggers = [];
-  lastConsumed = "";
-  strategy;
-  constructor() {
-    this.load();
-    this.strategy = 1 /* Phrase */;
-  }
-  async load() {
-    try {
-      const response = await fetch("/api/commands/min");
-      if (!response.ok) {
-        throw new Error(`Failed to fetch commands: ${response.statusText}`);
-      }
-      const commands = await response.json();
-      this.triggers = commands.reduce((acc, cmd) => {
-        return acc.concat(cmd.called_by);
-      }, []);
-      console.log(`[CommandCenter] Loaded ${this.triggers.length} command triggers.`);
-    } catch (err) {
-      console.warn("[CommandCenter] Could not load command registry.", err);
-    }
-  }
-  getTriggers() {
-    return this.triggers;
-  }
-  isValidTrigger(phrase) {
-    return this.triggers.includes(phrase.toLowerCase());
-  }
-  consume(input) {
-    const cleanInput = input.trim();
-    if (this.isValidTrigger(cleanInput)) {
-      this.lastConsumed = cleanInput;
-      console.log(`[CommandCenter] consumed: "${this.lastConsumed}"`);
-      return true;
-    }
-    return false;
-  }
-  getLastConsumed() {
-    return this.lastConsumed;
-  }
-}
-
 // client/SniperService.ts
 class SniperService {
   baseUrl = "http://localhost:9090";
   async sendCommand(command) {
     try {
       console.log(`[SniperService] Sending: ${command}`);
-      await fetch(`${this.baseUrl}/api/data`, {
+      const response = await fetch(`${this.baseUrl}/api/data`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({ command })
       });
+      if (!response.ok) {
+        console.warn(`[SniperService] Request failed with status: ${response.status} ${response.statusText}`);
+      }
+      return response.status;
     } catch (err) {
       console.warn("[SniperService] Connection failed. Is the backend running?", err);
+      return 0;
     }
   }
 }
@@ -191,6 +205,15 @@ class StaticCommandHandler {
   process(text) {
     const command = text.toLowerCase().trim().replace(/[?!.,]/g, "");
     switch (command) {
+      case "rapid":
+        this.core.setMode("rapid");
+        return true;
+      case "rabbit":
+        this.core.setMode("rapid");
+        return true;
+      case "phrase":
+        this.core.setMode("phrase");
+        return true;
       case "exit":
         this.core.audio.play("sniper-exit");
         this.core.ui.clearText();
@@ -223,7 +246,7 @@ class PhraseMode {
     this.core = core;
     this.sysCmd = new StaticCommandHandler(core);
   }
-  handleResult(event) {
+  async handleResult(event) {
     if (this.silenceTimer) {
       clearTimeout(this.silenceTimer);
       this.silenceTimer = null;
@@ -269,15 +292,51 @@ class PhraseMode {
   }
 }
 
+// client/Thottler.ts
+class Throttler {
+  duration;
+  timeoutId = null;
+  _waiting = false;
+  constructor(durationMs) {
+    this.duration = durationMs;
+  }
+  wait() {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+    }
+    this._waiting = true;
+    this.timeoutId = setTimeout(() => {
+      this._waiting = false;
+      this.timeoutId = null;
+    }, this.duration);
+  }
+  isWaiting() {
+    return this._waiting;
+  }
+  cancel() {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
+    this._waiting = false;
+  }
+}
+
 // client/RapidMode.ts
 class RapidMode {
   core;
   sysCmd;
+  throttler;
+  sameWordThrottler;
+  prevWord;
   constructor(core) {
     this.core = core;
     this.sysCmd = new StaticCommandHandler(core);
+    this.throttler = new Throttler(400);
+    this.sameWordThrottler = new Throttler(1100);
+    this.prevWord = "";
   }
-  handleResult(event) {
+  async handleResult(event) {
     for (let i = event.resultIndex;i < event.results.length; ++i) {
       const result = event.results[i];
       if (!result || !result.length)
@@ -289,15 +348,30 @@ class RapidMode {
       if (this.sysCmd.process(transcript)) {
         return;
       }
+      let words = transcript.split(" ");
+      let lastWord = words[words.length - 1];
+      if (!lastWord) {
+        continue;
+      }
+      if (this.throttler.isWaiting()) {
+        continue;
+      }
+      this.throttler.wait();
+      this.sameWordThrottler.wait();
+      if (this.prevWord == lastWord && this.sameWordThrottler.isWaiting()) {
+        continue;
+      }
+      let status = await this.core.api.sendCommand(lastWord);
+      if (status != 200) {
+        this.core.ui.updateText("", "", this.core.state.isLogging);
+        return;
+      }
+      this.prevWord = lastWord;
+      this.core.audio.play("click");
       if (result.isFinal) {
         this.core.ui.updateText(transcript, "", this.core.state.isLogging);
       } else {
         this.core.ui.updateText("", transcript, this.core.state.isLogging);
-      }
-      if (result.isFinal && this.core.state.isLogging) {
-        this.core.commandCenter.consume(transcript);
-        this.core.api.sendCommand(transcript.trim());
-        this.core.audio.play("click");
       }
     }
   }
@@ -316,14 +390,18 @@ class SniperCore {
   };
   recognition = null;
   mode;
-  constructor(audio, ui) {
-    this.audio = audio;
-    this.ui = ui;
+  constructor() {
+    this.audio = new AudioManager;
+    this.ui = new UIManager;
     this.commandCenter = new CommandCenter;
     this.api = new SniperService;
     this.mode = new RapidMode(this);
-    this.initializeSpeechEngine();
-    this.bindEvents();
+  }
+  static async new() {
+    const core = new SniperCore;
+    core.initializeSpeechEngine();
+    core.bindEvents();
+    return core;
   }
   setMode(modeType) {
     if (modeType === "rapid") {
@@ -368,8 +446,8 @@ class SniperCore {
       this.ui.setRecordingState(false);
       this.ui.updateGreenDot(this.state.isRecording, this.state.isLogging);
     };
-    this.recognition.onresult = (event) => {
-      this.mode.handleResult(event);
+    this.recognition.onresult = async (event) => {
+      await this.mode.handleResult(event);
     };
     this.recognition.onerror = (event) => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
@@ -402,8 +480,6 @@ class SniperCore {
 }
 
 // client/index.ts
-document.addEventListener("DOMContentLoaded", () => {
-  const audioManager = new AudioManager;
-  const uiManager = new UIManager;
-  const app = new SniperCore(audioManager, uiManager);
+document.addEventListener("DOMContentLoaded", async () => {
+  const app = await SniperCore.new();
 });

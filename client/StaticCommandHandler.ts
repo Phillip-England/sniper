@@ -21,6 +21,10 @@ export class StaticCommandHandler {
         this.core.setMode('rapid')
         return true
 
+      case "rabbit":
+        this.core.setMode('rapid')
+        return true
+
       case "phrase":
         this.core.setMode('phrase')
         return true
