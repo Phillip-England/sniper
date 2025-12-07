@@ -107,14 +107,12 @@ func runServer(engine *sniper.Engine) error {
 			Mode    string `json:"mode"`
 		}
 
-		fmt.Println(req.Mode)
-
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
-		engine.Parse(req.Command)
+		engine.Parse(req.Command, req.Mode)
 
 		if err := engine.Execute(); err != nil {
 			http.Error(w, "Execution Error: "+err.Error(), http.StatusBadRequest)

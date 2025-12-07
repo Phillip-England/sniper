@@ -1,12 +1,21 @@
 package sniper
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
 
+type ExecutonMode string
+
+const (
+	ModeRapid  ExecutonMode = "RAPID"
+	ModePhrase ExecutonMode = "PHRASE"
+)
+
 // EngineState holds the transient state for a single parse/execute cycle.
 type EngineState struct {
+	ExecutionMode     ExecutonMode
 	Tokens            []Token
 	RemainingTokens   []Token
 	HandledTokens     []Token
@@ -15,10 +24,8 @@ type EngineState struct {
 	RawWords          []string
 	LastCmd           Cmd
 	FirstCmdIsValid   bool
-
-	// New fields for argument consumption
-	ConsumedArgs []string // Stores words like "banana" consumed by commands
-	SkipCount    int      // How many tokens to skip in the main loop
+	ConsumedArgs      []string // Stores words like "banana" consumed by commands
+	SkipCount         int      // How many tokens to skip in the main loop
 }
 
 // Advance updates the tracking slices and strings for the current execution step.
@@ -78,18 +85,26 @@ func (e *Engine) registerCommands() {
 	}
 }
 
-func (e *Engine) Parse(input string) {
+func (e *Engine) Parse(input string, mode string) {
 	if e.State != nil && !strings.Contains(strings.ToLower(e.RawInput), "repeat") {
 		e.LastState = e.State
 	}
 
 	e.RawInput = input
 
+	var executionMode ExecutonMode
+	if mode == "rapid" {
+		executionMode = ModeRapid
+	}
+	if mode == "phrase" {
+		executionMode = ModePhrase
+	}
 	s := &EngineState{
 		LastCmd:         nil,
 		FirstCmdIsValid: false,
 		ConsumedArgs:    make([]string, 0),
 		SkipCount:       0,
+		ExecutionMode:   executionMode,
 	}
 
 	input = strings.ToLower(input)
@@ -124,6 +139,65 @@ func (e *Engine) Execute() error {
 		return nil
 	}
 
+	if e.State.ExecutionMode == ModePhrase {
+		err := e.handlePhraseMode()
+		if err != nil {
+			return err
+		}
+		e.IsOperating = true
+		return nil
+	}
+
+	if e.State.ExecutionMode == ModeRapid {
+		// handle rapid execution
+		lastTok := e.State.Tokens[len(e.State.Tokens)-1]
+
+		// handling regular commands
+		if lastTok.Type() == 1 {
+			shouldStop, err := lastTok.Handle(e, 0)
+			if err != nil {
+				return err
+			}
+			if shouldStop {
+				e.IsOperating = false
+			}
+		}
+
+		// handling numbers
+		if lastTok.Type() == 2 {
+			amt, err := strconv.Atoi(lastTok.Literal())
+			if err != nil {
+				return err
+			}
+			prevTok := e.LastState.Tokens[len(e.LastState.Tokens)-1]
+			amt = amt - 1
+			for {
+				if amt <= 0 {
+					break
+				}
+				shouldStop, err := prevTok.Handle(e, 0)
+				if err != nil {
+					return err
+				}
+				if shouldStop {
+					e.IsOperating = false
+				}
+				amt -= 1
+			}
+
+		}
+
+		// handling raw value
+		if lastTok.Type() == 0 {
+			// skip for now..
+		}
+
+	}
+
+	return nil
+}
+
+func (e *Engine) handlePhraseMode() error {
 	for i, token := range e.State.Tokens {
 		if !e.IsOperating {
 			break

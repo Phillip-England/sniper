@@ -178,15 +178,16 @@ class SniperService {
   async sendCommand(command, mode) {
     try {
       console.log(`[SniperService] Sending: ${command}`);
+      let reqBody = JSON.stringify({
+        command,
+        mode: mode.name()
+      });
       const response = await fetch(`${this.baseUrl}/api/data`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          command,
-          mode: mode.name()
-        })
+        body: reqBody
       });
       if (!response.ok) {
         console.warn(`[SniperService] Request failed with status: ${response.status} ${response.statusText}`);
