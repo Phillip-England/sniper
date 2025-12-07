@@ -94,10 +94,10 @@ func (t *NumberToken) Literal() string { return t.literal }
 func (t *NumberToken) Value() int      { return t.value }
 
 func (t *NumberToken) Handle(e *Engine, index int) (bool, error) {
-	// We only repeat if we have a valid previous command in memory
+	// CASE 1: Intra-phrase Repetition (e.g., "Left 5")
+	// We have a valid command in the CURRENT sequence history.
 	if e.State.LastCmd != nil {
-		// The command already ran once when we encountered it.
-		// We run it (value - 1) more times.
+		// The command already ran once. Run it (value - 1) more times.
 		if t.value > 1 {
 			for k := 0; k < t.value-1; k++ {
 				if err := e.State.LastCmd.Action(e, ""); err != nil {
@@ -105,11 +105,36 @@ func (t *NumberToken) Handle(e *Engine, index int) (bool, error) {
 				}
 			}
 		}
-		// CRITICAL: Wash away the previous action.
-		// As per requirements: "left 10 10" -> The second 10 should be skipped.
+		// Consume the LastCmd so "Left 10 10" doesn't cascade.
 		e.State.LastCmd = nil
+		return false, nil
 	}
-	// If LastCmd is nil, we simply ignore this number.
+
+	// CASE 2: Inter-phrase Repetition (e.g., User said "Left Down", then says "5")
+	// There is no command in the current sequence, and Parse has preserved LastState.
+	if e.LastState != nil && len(e.LastState.Tokens) > 0 {
+		// We repeat the entire sequence 't.value' times.
+		for k := 0; k < t.value; k++ {
+			for _, prevToken := range e.LastState.Tokens {
+
+				// SAFETY CHECK: Prevent infinite recursion.
+				// If the previous sequence contained a Number, we only allow it
+				// if it has a valid LastCmd to act on. If it's a "naked" number, skip it.
+				// This prevents "2" -> "2" from exploding if State was wiped.
+				if prevToken.Type() == TokenTypeNumber && e.State.LastCmd == nil {
+					continue
+				}
+
+				// Execute the token.
+				// We pass -1 as index because strict indexing doesn't matter for replay.
+				_, err := prevToken.Handle(e, -1)
+				if err != nil {
+					return false, err
+				}
+			}
+		}
+	}
+
 	return false, nil
 }
 

@@ -86,7 +86,35 @@ func (e *Engine) registerCommands() {
 }
 
 func (e *Engine) Parse(input string, mode string) {
-	if e.State != nil && !strings.Contains(strings.ToLower(e.RawInput), "repeat") {
+	// 1. Determine if we should preserve the LastState.
+	// We preserve it if the user explicitly says "repeat",
+	// OR if the input consists ENTIRELY of numbers (e.g. "2", "2 10", "twenty").
+	shouldPreserveState := strings.Contains(strings.ToLower(input), "repeat")
+
+	if !shouldPreserveState {
+		// Check if the entire input is just numbers
+		prep := NewNumberPreprocessor()
+		words := strings.Fields(input)
+		if len(words) > 0 {
+			allNumbers := true
+			for _, w := range words {
+				// Convert word to digit form (e.g., "two" -> "2")
+				processed := prep.Process(w)
+				// If it's not an integer, then this phrase contains a real command
+				if _, err := strconv.Atoi(processed); err != nil {
+					allNumbers = false
+					break
+				}
+			}
+			if allNumbers {
+				shouldPreserveState = true
+			}
+		}
+	}
+
+	// 2. Rotate State to LastState if we aren't preserving it.
+	// This ensures "Left" sets LastState, but "2" keeps "Left" as LastState.
+	if e.State != nil && !shouldPreserveState {
 		e.LastState = e.State
 	}
 
@@ -169,22 +197,25 @@ func (e *Engine) Execute() error {
 			if err != nil {
 				return err
 			}
-			prevTok := e.LastState.Tokens[len(e.LastState.Tokens)-1]
-			amt = amt - 1
-			for {
-				if amt <= 0 {
-					break
+			// In Rapid mode, we might need similar logic to token.go
+			// but for now, assuming Rapid uses simple command repetition:
+			if e.LastState != nil && len(e.LastState.Tokens) > 0 {
+				prevTok := e.LastState.Tokens[len(e.LastState.Tokens)-1]
+				amt = amt - 1
+				for {
+					if amt <= 0 {
+						break
+					}
+					shouldStop, err := prevTok.Handle(e, 0)
+					if err != nil {
+						return err
+					}
+					if shouldStop {
+						e.IsOperating = false
+					}
+					amt -= 1
 				}
-				shouldStop, err := prevTok.Handle(e, 0)
-				if err != nil {
-					return err
-				}
-				if shouldStop {
-					e.IsOperating = false
-				}
-				amt -= 1
 			}
-
 		}
 
 		// handling raw value

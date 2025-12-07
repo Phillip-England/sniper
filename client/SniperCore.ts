@@ -50,7 +50,7 @@ export class SniperCore {
     this.api = new SniperService();
 
     // Initialize default mode
-    this.mode = new RapidMode(this);
+    this.mode = new PhraseMode(this);
   }
 
   /**

@@ -405,7 +405,7 @@ class SniperCore {
     this.ui = new UIManager;
     this.commandCenter = new CommandCenter;
     this.api = new SniperService;
-    this.mode = new RapidMode(this);
+    this.mode = new PhraseMode(this);
   }
   static async new() {
     const core = new SniperCore;
